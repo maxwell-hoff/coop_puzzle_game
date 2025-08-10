@@ -371,59 +371,114 @@
     }
 
     // --- Login ---
-    function login(username, password) {
-      const users = Storage.getUsers();
-      if (!users[username]) return { ok: false, error: 'No such user. Register first.' };
-      const passhash = hashString(password);
-      if (users[username].passhash !== passhash) return { ok: false, error: 'Incorrect password.' };
-      Storage.setSession(username);
-      const profile = Storage.getProfile(username) || { chapters: { [CURRENT_CHAPTER.id]: { completed: [], unlocked: [CURRENT_CHAPTER.puzzles[0].id] } } };
-      CURRENT_USER = { username, profile };
-      return { ok: true };
+    async function login(username, password) {
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        
+        const data = await response.json();
+        if (response.ok) {
+          CURRENT_USER = { 
+            username: data.username, 
+            user_id: data.user_id,
+            current_chapter: data.current_chapter 
+          };
+          // Store session token in localStorage for persistence
+          localStorage.setItem('hexp_session', JSON.stringify({ 
+            username: data.username, 
+            user_id: data.user_id,
+            current_chapter: data.current_chapter 
+          }));
+          return { ok: true };
+        } else {
+          return { ok: false, error: data.error };
+        }
+      } catch (error) {
+        return { ok: false, error: 'Network error. Please try again.' };
+      }
     }
-    function register(username, password) {
+    
+    async function register(username, password) {
       if (!username || !password) return { ok: false, error: 'Enter username and password.' };
-      const users = Storage.getUsers();
-      if (users[username]) return { ok: false, error: 'Username already exists.' };
-      users[username] = { passhash: hashString(password), createdAt: Date.now() };
-      Storage.setUsers(users);
-      Storage.setProfile(username, { chapters: { [CURRENT_CHAPTER.id]: { completed: [], unlocked: [CURRENT_CHAPTER.puzzles[0].id] } } });
-      return { ok: true };
+      
+      try {
+        const response = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        
+        const data = await response.json();
+        if (response.ok) {
+          return { ok: true };
+        } else {
+          return { ok: false, error: data.error };
+        }
+      } catch (error) {
+        return { ok: false, error: 'Network error. Please try again.' };
+      }
     }
+    
     function loadSession() {
-      const sess = Storage.getSession();
+      const sess = localStorage.getItem('hexp_session');
       if (!sess) return false;
-      const profile = Storage.getProfile(sess.username) || { chapters: { [CURRENT_CHAPTER.id]: { completed: [], unlocked: [CURRENT_CHAPTER.puzzles[0].id] } } };
-      CURRENT_USER = { username: sess.username, profile };
-      return true;
+      
+      try {
+        const sessionData = JSON.parse(sess);
+        CURRENT_USER = { 
+          username: sessionData.username, 
+          user_id: sessionData.user_id,
+          current_chapter: sessionData.current_chapter 
+        };
+        return true;
+      } catch {
+        return false;
+      }
     }
+    
     function saveProfile() {
-      if (!CURRENT_USER) return;
-      Storage.setProfile(CURRENT_USER.username, CURRENT_USER.profile);
+      // Profile saving is now handled by the backend
+      return;
     }
 
     // --- Menu Populate ---
-    function renderMenu() {
+    async function renderMenu() {
       el('user-tag').innerText = CURRENT_USER.username;
-      el('chapter-index').innerText = '1';
+      el('chapter-index').innerText = CURRENT_USER.current_chapter || '1';
       el('chapter-title').innerText = CURRENT_CHAPTER.title;
       el('story-title').innerText = CURRENT_CHAPTER.title;
       el('story-text').innerText = CURRENT_CHAPTER.text;
       el('story-hint').innerText = CURRENT_CHAPTER.hint;
 
-      const st = CURRENT_USER.profile.chapters[CURRENT_CHAPTER.id] || { completed: [], unlocked: [CURRENT_CHAPTER.puzzles[0].id] };
-      CURRENT_USER.profile.chapters[CURRENT_CHAPTER.id] = st;
-      let done = 0;
-      for (const p of CURRENT_CHAPTER.puzzles) if (st.completed.includes(p.id)) done++;
-      el('progress-text').innerText = `${done}/${CURRENT_CHAPTER.puzzles.length} completed`;
-      renderLineageMap();
+      // Fetch progress from backend
+      try {
+        const response = await fetch('/api/progress');
+        if (response.ok) {
+          const progressData = await response.json();
+          const currentChapterProgress = progressData[CURRENT_USER.current_chapter] || [];
+          let done = 0;
+          for (const p of CURRENT_CHAPTER.puzzles) {
+            const puzzleProgress = currentChapterProgress.find(pp => pp.puzzle_id === p.id);
+            if (puzzleProgress && puzzleProgress.completed) done++;
+          }
+          el('progress-text').innerText = `${done}/${CURRENT_CHAPTER.puzzles.length} completed`;
+          renderLineageMap(currentChapterProgress);
+        }
+      } catch (error) {
+        console.log('Error fetching progress:', error);
+        el('progress-text').innerText = '0/0 completed';
+        renderLineageMap([]);
+      }
     }
 
-    function renderLineageMap() {
+    function renderLineageMap(progressData = []) {
       const svg = document.getElementById('puzzle-map');
       if (!svg) return;
       svg.innerHTML = '';
-      const st = CURRENT_USER.profile.chapters[CURRENT_CHAPTER.id];
+      // progressData parameter contains puzzle progress from backend
       const width = svg.clientWidth || 800;
       const N = CURRENT_CHAPTER.puzzles.length;
       const margin = 40; const span = Math.max(120, (width - margin*2) / Math.max(1, N-1));
@@ -440,8 +495,9 @@
       // nodes
       for (let i = 0; i < N; i++) {
         const p = CURRENT_CHAPTER.puzzles[i];
-        const unlocked = st.unlocked.includes(p.id);
-        const completed = st.completed.includes(p.id);
+        const puzzleProgress = progressData.find(pp => pp.puzzle_id === p.id);
+        const unlocked = i === 0 || (puzzleProgress && puzzleProgress.completed);
+        const completed = puzzleProgress && puzzleProgress.completed;
         const x = margin + i*span;
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g.setAttribute('class', 'map-node' + (unlocked ? '' : ' locked'));
@@ -1025,24 +1081,78 @@
       }
       return best;
     }
-    function onVictory() {
+    async function onVictory() {
       log('You captured the enemy Commander!', 'success');
-      // mark completed
-      const st = CURRENT_USER.profile.chapters[CURRENT_CHAPTER.id];
-      if (!st.completed.includes(CURRENT_PUZZLE.id)) st.completed.push(CURRENT_PUZZLE.id);
-      // unlock next
-      const idx = CURRENT_CHAPTER.puzzles.findIndex(p=>p.id===CURRENT_PUZZLE.id);
-      const next = CURRENT_CHAPTER.puzzles[idx+1];
-      if (next && !st.unlocked.includes(next.id)) st.unlocked.push(next.id);
-      saveProfile();
+      
+      // Save progress to backend
+      try {
+        const response = await fetch('/api/puzzle/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: GAME.sessionId,
+            puzzle_id: CURRENT_PUZZLE.id,
+            moves_used: CURRENT_PUZZLE.limit - GAME.turnsLeft,
+            hints_used: 0, // TODO: track hints used
+            team_mode: GAME.teamMode
+          })
+        });
+        
+        if (response.ok) {
+          // Check if we should unlock next chapter
+          const currentChapter = CURRENT_USER.current_chapter || 1;
+          const chapterProgress = await fetch('/api/progress');
+          if (chapterProgress.ok) {
+            const progressData = await chapterProgress.json();
+            const chapterPuzzles = progressData[currentChapter] || [];
+            const allCompleted = chapterPuzzles.every(p => p.completed);
+            
+            if (allCompleted && currentChapter < 2) { // Assuming 2 chapters for now
+              // Unlock next chapter
+              await fetch(`/api/chapter/${currentChapter + 1}/unlock`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+              });
+              CURRENT_USER.current_chapter = currentChapter + 1;
+            }
+          }
+        }
+      } catch (error) {
+        console.log('Error saving progress:', error);
+      }
+      
       setTimeout(()=>{ alert('Victory! Puzzle complete.'); exitToMenu(); }, 50);
     }
     function onDefeat(msg) { log('Defeat: '+msg, 'danger'); setTimeout(()=>{ alert('Defeat: '+msg); }, 50); }
 
     // --- Puzzle Flow ---
-    function startPuzzle(p) {
+    async function startPuzzle(p) {
       CURRENT_PUZZLE = p;
-      GAME = new GameState(p);
+      
+      // Create game session with backend
+      try {
+        const response = await fetch('/api/puzzle/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            puzzle_id: p.id,
+            chapter: CURRENT_USER.current_chapter || 1
+          })
+        });
+        
+        if (response.ok) {
+          const sessionData = await response.json();
+          GAME = new GameState(p);
+          GAME.sessionId = sessionData.session_id;
+        } else {
+          console.log('Error creating session:', response.statusText);
+          GAME = new GameState(p);
+        }
+      } catch (error) {
+        console.log('Error creating session:', error);
+        GAME = new GameState(p);
+      }
+      
       ensureDoomPiece(GAME);
       selectedId = null; highlightedMoves = [];
       el('game-title').innerText = p.name;
@@ -1069,7 +1179,7 @@
       const begin = document.getElementById('story-modal-begin');
       const cancel = document.getElementById('story-modal-cancel');
       const off = ()=>{ m.classList.remove('active'); begin.onclick=null; cancel.onclick=null; };
-      begin.onclick = ()=>{ off(); startPuzzle(p); };
+      begin.onclick = async ()=>{ off(); await startPuzzle(p); };
       cancel.onclick = ()=>{ off(); };
     }
     function exitToMenu() { showScreen('menu'); renderMenu(); }
@@ -1146,25 +1256,33 @@
     }
 
     // --- Login wiring ---
-    el('btn-login').addEventListener('click', ()=>{
+    el('btn-login').addEventListener('click', async ()=>{
       const u = el('login-username').value.trim();
       const p = el('login-password').value;
-      const res = login(u, p);
+      const res = await login(u, p);
       if (!res.ok) { alert(res.error); return; }
       showScreen('menu'); renderMenu();
     });
-    el('btn-register').addEventListener('click', ()=>{
+    el('btn-register').addEventListener('click', async ()=>{
       const u = el('login-username').value.trim();
       const p = el('login-password').value;
-      const res = register(u, p);
+      const res = await register(u, p);
       if (!res.ok) { alert(res.error); return; }
       alert('Registered! You can now login.');
     });
-    el('btn-logout').addEventListener('click', ()=>{ Storage.clearSession(); location.reload(); });
+    el('btn-logout').addEventListener('click', async ()=>{ 
+      try {
+        await fetch('/api/logout', { method: 'GET' });
+      } catch (error) {
+        console.log('Logout error:', error);
+      }
+      localStorage.removeItem('hexp_session');
+      location.reload(); 
+    });
 
     // --- Boot ---
-    (function boot(){
-      if (loadSession()) { showScreen('menu'); renderMenu(); }
+    (async function boot(){
+      if (loadSession()) { showScreen('menu'); await renderMenu(); }
       else { showScreen('login'); }
       drawBoard(new GameState(STORY[0].puzzles[0]));
     })();
