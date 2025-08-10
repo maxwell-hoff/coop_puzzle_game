@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hex Siege Puzzles</title>
+  <style>
+    :root {
+      --bg: #0f1220;
+      --panel: #171a2b;
+      --panel-2: #1e2237;
+      --accent: #7c9cff;
+      --accent-2: #f5b971;
+      --text: #e7ecff;
+      --muted: #a8b0d6;
+      --danger: #ff6b6b;
+      --success: #6bffa8;
+      --warning: #ffd56b;
+      --hex-a: #2a2f4a;
+      --hex-b: #242842;
+      --p1: #5bc0eb;
+      --p2: #f25f5c;
+      --neutral: #8d99ae;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    button { background: var(--accent); color: #0b1022; border: none; padding: 10px 14px; border-radius: 10px; font-weight: 600; cursor: pointer; }
+    button.secondary { background: var(--panel-2); color: var(--text); border: 1px solid #2c3358; }
+    button.ghost { background: transparent; border: 1px solid #2c3358; color: var(--muted); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    input, select { background: var(--panel-2); border: 1px solid #2c3358; color: var(--text); padding: 10px 12px; border-radius: 10px; width: 100%; }
+
+    .screen { display: none; height: 100%; }
+    .screen.active { display: flex; }
+
+    .centered { width: 100%; display: flex; align-items: center; justify-content: center; }
+    .card { background: var(--panel); border: 1px solid #2c3358; border-radius: 16px; padding: 24px; width: 100%; max-width: 520px; box-shadow: 0 10px 40px rgba(0,0,0,0.35); }
+    .row { display: flex; gap: 12px; }
+    .col { display: flex; flex-direction: column; gap: 12px; }
+    .spaced { display: flex; align-items: center; justify-content: space-between; }
+    .muted { color: var(--muted); }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: var(--panel-2); border: 1px solid #2c3358; color: var(--muted); }
+    .notice { padding: 10px 12px; border-radius: 12px; background: rgba(124,156,255,0.1); border: 1px solid #2c3358; }
+    .danger { color: var(--danger); }
+    .success { color: var(--success); }
+    .warning { color: var(--warning); }
+
+    /* App layout */
+    .app { display: grid; grid-template-rows: auto 1fr; height: 100%; width: 100%; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid #2c3358; }
+    .topbar .left, .topbar .right { display: flex; gap: 10px; align-items: center; }
+    .content { display: grid; grid-template-columns: 320px 1fr 360px; gap: 12px; padding: 12px; }
+    .panel { background: var(--panel); border: 1px solid #2c3358; border-radius: 14px; padding: 12px; overflow: auto; }
+    .panel h3 { margin: 8px 0 8px; font-size: 16px; }
+    .panel h2 { margin: 6px 0 6px; font-size: 20px; }
+
+    /* Canvas container */
+    .board-wrap { position: relative; display: flex; align-items: center; justify-content: center; background: radial-gradient(1200px 600px at 50% 0%, #171a2b, #0f1220); border: 1px solid #2c3358; border-radius: 14px; }
+    canvas { display: block; border-radius: 14px; }
+
+    .puzzle-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .puzzle-card { background: var(--panel); border: 1px solid #2c3358; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .puzzle-card.locked { opacity: 0.55; }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .pill { padding: 6px 10px; border-radius: 999px; border: 1px solid #2c3358; background: var(--panel-2); font-size: 12px; color: var(--muted); }
+
+    .legend { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .legend-item { display: flex; gap: 8px; align-items: center; background: var(--panel-2); border: 1px solid #2c3358; padding: 8px; border-radius: 10px; }
+    .legend-swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid #2c3358; }
+
+    .kbd { padding: 2px 6px; border-radius: 6px; border: 1px solid #2c3358; background: var(--panel-2); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; color: var(--muted); }
+    .hint { background: rgba(245,185,113,0.08); border: 1px solid rgba(245,185,113,0.35); padding: 10px; border-radius: 12px; color: #ffdba6; }
+
+    /* Modal and Map */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 50; }
+    .modal-backdrop.active { display: flex; }
+    .modal { background: var(--panel); border: 1px solid #2c3358; border-radius: 16px; padding: 20px; width: 95%; max-width: 680px; box-shadow: 0 20px 80px rgba(0,0,0,0.4); }
+    .modal .footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+    .map-node { cursor: pointer; }
+    .map-node.locked { cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="login-screen" class="screen centered active">
+    <div class="card col">
+      <div class="col" style="gap: 4px;">
+        <h2>Hex Siege Puzzles</h2>
+        <div class="muted">Log in to track your progress. This runs fully offline in your browser.</div>
+      </div>
+      <div class="col">
+        <label>Username</label>
+        <input id="login-username" placeholder="e.g. wanderer" />
+      </div>
+      <div class="col">
+        <label>Password</label>
+        <input id="login-password" type="password" placeholder="••••••••" />
+      </div>
+      <div class="row" style="justify-content: flex-end;">
+        <button class="secondary" id="btn-register">Register</button>
+        <button id="btn-login">Login</button>
+      </div>
+      <div class="notice">
+        <div class="muted">No server required. Credentials are stored locally in your browser storage. Do not use a real password.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Menu Screen -->
+  <div id="menu-screen" class="screen active" style="display:none; flex-direction: column;">
+    <div class="topbar">
+      <div class="left">
+        <div class="tag" id="user-tag">Guest</div>
+        <div class="muted">Chapter <span id="chapter-index">1</span> • <span id="chapter-title">The Whispering Vale</span></div>
+      </div>
+      <div class="right">
+        <button class="secondary" id="btn-logout">Logout</button>
+      </div>
+    </div>
+    <div class="content" style="grid-template-columns: 440px 1fr;">
+      <div class="panel col">
+        <h2 id="story-title">The Whispering Vale</h2>
+        <div id="story-text" class="muted"></div>
+        <div class="hint" id="story-hint"></div>
+      </div>
+      <div class="panel col" style="overflow:hidden;">
+        <div class="spaced"><h3>Puzzles</h3><div class="muted" id="progress-text"></div></div>
+        <div id="puzzle-map-wrap" style="width:100%; height:100%; overflow:auto;">
+          <svg id="puzzle-map" width="100%" height="440" preserveAspectRatio="xMinYMin meet"></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Screen -->
+  <div id="game-screen" class="screen app" style="display:none;">
+    <div class="topbar">
+      <div class="left">
+        <button class="secondary" id="btn-exit">Back</button>
+        <div class="tag" id="game-title">Puzzle 1</div>
+        <div class="muted">Turns left: <span id="turns-left">3</span></div>
+        <div class="muted">Mode: <span id="mode-indicator">Solo</span></div>
+      </div>
+      <div class="right">
+        <button class="ghost" id="btn-toggle-team">Team Mode</button>
+        <button class="ghost" id="btn-swap-controller" disabled>Swap Controller</button>
+        <button class="ghost" id="btn-reset">Reset</button>
+      </div>
+    </div>
+    <div class="content">
+      <div class="panel col">
+        <h3>Objective</h3>
+        <div id="objective" class="muted">Capture the enemy Commander within the move limit.</div>
+        <div class="notice" id="puzzle-desc"></div>
+        <div class="hint" id="puzzle-hint"></div>
+        <h3>Legend</h3>
+        <div class="legend" id="legend"></div>
+        <h3>Log</h3>
+        <div id="log" class="col" style="max-height: 220px; overflow:auto; gap: 6px;"></div>
+      </div>
+      <div class="board-wrap"><canvas id="board" width="900" height="740"></canvas></div>
+      <div class="panel col">
+        <h3>Selected</h3>
+        <div id="selected" class="muted">None</div>
+        <div class="actions">
+          <button id="btn-endturn" class="secondary">End Turn</button>
+          <button id="btn-undo" class="ghost">Undo</button>
+          <button id="btn-hint" class="ghost">Hint</button>
+          <button id="btn-check-solution" class="ghost">Check Solution</button>
+        </div>
+        <h3>Abilities</h3>
+        <div id="abilities" class="col"></div>
+        <h3>Status</h3>
+        <div id="status" class="col"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Story Modal -->
+  <div id="story-modal" class="modal-backdrop">
+    <div class="modal col" id="story-modal-card">
+      <div class="row" style="align-items:center; justify-content: space-between;">
+        <h2 id="story-modal-title">Chapter Story</h2>
+        <span class="tag" id="story-modal-turns"></span>
+      </div>
+      <div id="story-modal-text" class="muted"></div>
+      <div class="notice" id="story-modal-desc"></div>
+      <div class="hint" id="story-modal-hint"></div>
+      <div class="footer">
+        <button class="ghost" id="story-modal-cancel">Cancel</button>
+        <button id="story-modal-begin">Begin</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Persistence Utilities ---
+    const Storage = {
+      getUsers() {
+        try { return JSON.parse(localStorage.getItem('hexp_users') || '{}'); } catch { return {}; }
+      },
+      setUsers(users) { localStorage.setItem('hexp_users', JSON.stringify(users)); },
+      getSession() { try { return JSON.parse(localStorage.getItem('hexp_session') || 'null'); } catch { return null; } },
+      setSession(username) { localStorage.setItem('hexp_session', JSON.stringify({ username })); },
+      clearSession() { localStorage.removeItem('hexp_session'); },
+      getProfile(username) { try { return JSON.parse(localStorage.getItem('hexp_user_'+username) || 'null'); } catch { return null; } },
+      setProfile(username, data) { localStorage.setItem('hexp_user_'+username, JSON.stringify(data)); },
+    };
+
+    function hashString(str) {
+      let h = 2166136261 >>> 0;
+      for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return (h >>> 0).toString(16);
+    }
+
+    // --- Game Constants ---
+    const SIDES = { Player: 'Player', Enemy: 'Enemy' };
+    const STATUS_FLAGS = {
+      immobilized: 'immobilized',
+      disarmed: 'disarmed',
+      silenced: 'silenced',
+    };
+
+    const TILE_RADIUS = 48; // pixel radius of hex
+    const BOARD_RADIUS = 4; // hex radius (distance from center)
+    const HEX_W = Math.sqrt(3) * TILE_RADIUS;
+    const HEX_H = 2 * TILE_RADIUS * 0.75; // vertical spacing
+
+    // --- Axial Coord Helpers ---
+    function axialToPixel(q, r) {
+      const x = TILE_RADIUS * Math.sqrt(3) * (q + r/2);
+      const y = TILE_RADIUS * 1.5 * r;
+      return { x, y };
+    }
+    function pixelToAxial(x, y) {
+      const q = (Math.sqrt(3)/3 * x - 1/3 * y) / TILE_RADIUS;
+      const r = (2/3 * y) / TILE_RADIUS;
+      return cubeRound({ x: q, z: r, y: -q - r });
+    }
+    function cubeRound(c) {
+      let rx = Math.round(c.x), ry = Math.round(c.y), rz = Math.round(c.z);
+      const x_diff = Math.abs(rx - c.x);
+      const y_diff = Math.abs(ry - c.y);
+      const z_diff = Math.abs(rz - c.z);
+      if (x_diff > y_diff && x_diff > z_diff) rx = -ry - rz;
+      else if (y_diff > z_diff) ry = -rx - rz;
+      else rz = -rx - ry;
+      return { q: rx, r: rz };
+    }
+    function neighbors(q, r) {
+      const dirs = [ [1,0], [1,-1], [0,-1], [-1,0], [-1,1], [0,1] ];
+      return dirs.map(([dq, dr]) => ({ q: q + dq, r: r + dr }));
+    }
+    function distance(a, b) {
+      return (Math.abs(a.q - b.q) + Math.abs(a.q + a.r - b.q - b.r) + Math.abs(a.r - b.r)) / 2;
+    }
+    function axialKey(q, r) { return `${q},${r}`; }
+
+    // --- Piece Definitions ---
+    // icon: one-letter code for rendering; color: outline color
+    const PIECE_TYPES = {
+      Commander: { name: 'Commander', icon: 'K', move: 1, melee: true, value: 100, desc: 'Your king. Lose if defeated.' },
+      Archer: { name: 'Archer', icon: 'A', move: 2, melee: true, ranged: { range: 3, los: true, type: 'physical' }, value: 5, desc: 'Ranged physical attack up to 3 with line of sight.' },
+      Berserker: { name: 'Berserker', icon: 'B', move: 1, melee: true, onAttack: 'aoe_adjacent', value: 4, desc: 'Melee. When attacking, also damages all adjacent enemies.' },
+      Guardian: { name: 'Guardian', icon: 'G', move: 1, melee: true, aura: { disarm: 1 }, value: 4, desc: 'Aura disarms adjacent enemies (no melee/ranged).' },
+      Mage: { name: 'Mage', icon: 'M', move: 1, melee: false, spell: { range: 3, los: false, type: 'spell' }, value: 6, desc: 'Spell attack up to 3 ignoring line-of-sight. Blocked if silenced.' },
+      Trapper: { name: 'Trapper', icon: 'T', move: 1, melee: false, ability: { immobilize: { range: 1, duration: 1 } }, value: 3, desc: 'Immobilize adjacent target for 1 turn.' },
+      Assassin: { name: 'Assassin', icon: 'S', move: 2, melee: true, leap: true, value: 5, desc: 'Moves up to 2. Can leap through empty tiles.' },
+      Shieldbearer: { name: 'Shield', icon: 'H', move: 1, melee: false, block: true, value: 2, desc: 'Cannot attack. Blocks line-of-sight for physical and spell attacks.' },
+      HexPriest: { name: 'Priest', icon: 'P', move: 1, melee: false, aura: { silence: 1 }, value: 4, desc: 'Aura silences adjacent enemies (no spells).' },
+      Doom: { name: 'Doom', icon: 'D', move: 0, melee: false, unkillable: true, value: 9999, desc: 'Embodiment of the turn limit. When time expires, it slays your army. Cannot be targeted or killed.' },
+    };
+
+    const PIECE_ORDER = Object.keys(PIECE_TYPES);
+
+    // --- Puzzles & Story ---
+    const STORY = [
+      {
+        id: 'ch1',
+        title: 'The Whispering Vale',
+        text: 'Rumors speak of an ancient crown lost in the Vale. Two warbands converge. Each puzzle is a skirmish where precise tactics win the day.',
+        hint: 'Every puzzle is winnable within the turn limit. Study auras and lines of sight.',
+        puzzles: [
+          {
+            id: 'p1', name: 'Opening Gambit (Mate in 2)', limit: 2,
+            description: 'Use your Archer and Trapper to neutralize threats and strike the enemy Commander.',
+            hint: 'Immobilize to freeze a defender. Beware Guardian disarm.',
+            expected: [ // optional exact line to check solution
+              { side: SIDES.Player, action: 'ability', from: '0,0', to: '1,-1' },
+              { side: SIDES.Enemy, action: 'move', from: '2,-1', to: '1,-1' },
+              { side: SIDES.Player, action: 'ranged', from: '0,1', to: '2,0' },
+            ],
+            setup: {
+              // radius 4 board; define pieces by axial coords
+              pieces: [
+                { type: 'Commander', side: SIDES.Player, q: -1, r: 1 },
+                { type: 'Archer', side: SIDES.Player, q: 0, r: 1 },
+                { type: 'Trapper', side: SIDES.Player, q: 0, r: 0 },
+                { type: 'Shieldbearer', side: SIDES.Player, q: -1, r: 0 },
+
+                { type: 'Commander', side: SIDES.Enemy, q: 2, r: 0 },
+                { type: 'Guardian', side: SIDES.Enemy, q: 1, r: 0 },
+                { type: 'Berserker', side: SIDES.Enemy, q: 2, r: -1 },
+                { type: 'Archer', side: SIDES.Enemy, q: 1, r: -2 },
+              ]
+            }
+          },
+          {
+            id: 'p2', name: 'Silent Strike (Mate in 3)', limit: 3,
+            description: 'A Priest silences enemy Mages; thread the needle while avoiding disarm auras.',
+            hint: 'Use Shieldbearer to break line-of-sight.',
+            setup: {
+              pieces: [
+                { type: 'Commander', side: SIDES.Player, q: -2, r: 2 },
+                { type: 'Mage', side: SIDES.Player, q: -1, r: 1 },
+                { type: 'Shieldbearer', side: SIDES.Player, q: -1, r: 2 },
+                { type: 'Assassin', side: SIDES.Player, q: -2, r: 1 },
+
+                { type: 'Commander', side: SIDES.Enemy, q: 2, r: -1 },
+                { type: 'HexPriest', side: SIDES.Enemy, q: 1, r: -1 },
+                { type: 'Guardian', side: SIDES.Enemy, q: 1, r: 0 },
+                { type: 'Archer', side: SIDES.Enemy, q: 2, r: -2 },
+              ]
+            }
+          },
+          {
+            id: 'p3', name: 'Berserker’s Ring (Mate in 2)', limit: 2,
+            description: 'Berserker can clear a path. Watch for counter-attack lines.',
+            hint: 'Auras turn off attacks. Step out of them.',
+            setup: {
+              pieces: [
+                { type: 'Commander', side: SIDES.Player, q: 0, r: 2 },
+                { type: 'Berserker', side: SIDES.Player, q: 0, r: 1 },
+                { type: 'Archer', side: SIDES.Player, q: -1, r: 2 },
+
+                { type: 'Commander', side: SIDES.Enemy, q: 1, r: -1 },
+                { type: 'Guardian', side: SIDES.Enemy, q: 0, r: 0 },
+                { type: 'Shieldbearer', side: SIDES.Enemy, q: 1, r: 0 },
+                { type: 'Archer', side: SIDES.Enemy, q: 2, r: -1 },
+              ]
+            }
+          }
+        ]
+      }
+    ];
+
+    // --- UI Elements ---
+    const el = (id) => document.getElementById(id);
+    const screens = {
+      login: el('login-screen'),
+      menu: el('menu-screen'),
+      game: el('game-screen'),
+    };
+
+    // --- Session State ---
+    let CURRENT_USER = null; // { username, data }
+    let CURRENT_CHAPTER = STORY[0];
+    let CURRENT_PUZZLE = null;
+    let GAME = null;
+
+    // --- UI Navigation ---
+    function showScreen(name) {
+      for (const key of Object.keys(screens)) screens[key].style.display = 'none';
+      screens[name].style.display = name === 'login' ? 'flex' : (name === 'game' ? 'grid' : 'flex');
+    }
+
+    // --- Login ---
+    function login(username, password) {
+      const users = Storage.getUsers();
+      if (!users[username]) return { ok: false, error: 'No such user. Register first.' };
+      const passhash = hashString(password);
+      if (users[username].passhash !== passhash) return { ok: false, error: 'Incorrect password.' };
+      Storage.setSession(username);
+      const profile = Storage.getProfile(username) || { chapters: { [CURRENT_CHAPTER.id]: { completed: [], unlocked: [CURRENT_CHAPTER.puzzles[0].id] } } };
+      CURRENT_USER = { username, profile };
+      return { ok: true };
+    }
+    function register(username, password) {
+      if (!username || !password) return { ok: false, error: 'Enter username and password.' };
+      const users = Storage.getUsers();
+      if (users[username]) return { ok: false, error: 'Username already exists.' };
+      users[username] = { passhash: hashString(password), createdAt: Date.now() };
+      Storage.setUsers(users);
+      Storage.setProfile(username, { chapters: { [CURRENT_CHAPTER.id]: { completed: [], unlocked: [CURRENT_CHAPTER.puzzles[0].id] } } });
+      return { ok: true };
+    }
+    function loadSession() {
+      const sess = Storage.getSession();
+      if (!sess) return false;
+      const profile = Storage.getProfile(sess.username) || { chapters: { [CURRENT_CHAPTER.id]: { completed: [], unlocked: [CURRENT_CHAPTER.puzzles[0].id] } } };
+      CURRENT_USER = { username: sess.username, profile };
+      return true;
+    }
+    function saveProfile() {
+      if (!CURRENT_USER) return;
+      Storage.setProfile(CURRENT_USER.username, CURRENT_USER.profile);
+    }
+
+    // --- Menu Populate ---
+    function renderMenu() {
+      el('user-tag').innerText = CURRENT_USER.username;
+      el('chapter-index').innerText = '1';
+      el('chapter-title').innerText = CURRENT_CHAPTER.title;
+      el('story-title').innerText = CURRENT_CHAPTER.title;
+      el('story-text').innerText = CURRENT_CHAPTER.text;
+      el('story-hint').innerText = CURRENT_CHAPTER.hint;
+
+      const st = CURRENT_USER.profile.chapters[CURRENT_CHAPTER.id] || { completed: [], unlocked: [CURRENT_CHAPTER.puzzles[0].id] };
+      CURRENT_USER.profile.chapters[CURRENT_CHAPTER.id] = st;
+      let done = 0;
+      for (const p of CURRENT_CHAPTER.puzzles) if (st.completed.includes(p.id)) done++;
+      el('progress-text').innerText = `${done}/${CURRENT_CHAPTER.puzzles.length} completed`;
+      renderLineageMap();
+    }
+
+    function renderLineageMap() {
+      const svg = document.getElementById('puzzle-map');
+      if (!svg) return;
+      svg.innerHTML = '';
+      const st = CURRENT_USER.profile.chapters[CURRENT_CHAPTER.id];
+      const width = svg.clientWidth || 800;
+      const N = CURRENT_CHAPTER.puzzles.length;
+      const margin = 40; const span = Math.max(120, (width - margin*2) / Math.max(1, N-1));
+      const y = 180; const radius = 20;
+      // lines
+      for (let i = 0; i < N-1; i++) {
+        const x1 = margin + i*span, x2 = margin + (i+1)*span;
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', x1); line.setAttribute('y1', y);
+        line.setAttribute('x2', x2); line.setAttribute('y2', y);
+        line.setAttribute('stroke', '#2c3358'); line.setAttribute('stroke-width', '3');
+        svg.appendChild(line);
+      }
+      // nodes
+      for (let i = 0; i < N; i++) {
+        const p = CURRENT_CHAPTER.puzzles[i];
+        const unlocked = st.unlocked.includes(p.id);
+        const completed = st.completed.includes(p.id);
+        const x = margin + i*span;
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('class', 'map-node' + (unlocked ? '' : ' locked'));
+        g.style.opacity = unlocked ? '1' : '0.5';
+        // halo if completed
+        if (completed) {
+          const halo = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          halo.setAttribute('cx', x); halo.setAttribute('cy', y); halo.setAttribute('r', radius+8);
+          halo.setAttribute('fill', 'none'); halo.setAttribute('stroke', '#6bffa8'); halo.setAttribute('stroke-width', '3'); halo.setAttribute('stroke-dasharray', '4,4');
+          svg.appendChild(halo);
+        }
+        const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', radius);
+        c.setAttribute('fill', unlocked ? '#1e2237' : '#15182b');
+        c.setAttribute('stroke', unlocked ? '#7c9cff' : '#2c3358');
+        c.setAttribute('stroke-width', '3');
+        g.appendChild(c);
+        const t1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        t1.setAttribute('x', x); t1.setAttribute('y', y-32); t1.setAttribute('text-anchor', 'middle'); t1.setAttribute('fill', '#e7ecff'); t1.setAttribute('font-size', '12'); t1.textContent = p.name;
+        svg.appendChild(t1);
+        const t2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        t2.setAttribute('x', x); t2.setAttribute('y', y+4); t2.setAttribute('text-anchor', 'middle'); t2.setAttribute('fill', '#e7ecff'); t2.setAttribute('font-size', '12'); t2.textContent = p.limit + 'T';
+        g.appendChild(t2);
+        if (unlocked) g.addEventListener('click', ()=> openPuzzleIntro(p));
+        svg.appendChild(g);
+      }
+    }
+
+    // --- Game Model ---
+    class Piece {
+      constructor(id, typeKey, side, q, r) {
+        this.id = id;
+        this.typeKey = typeKey;
+        this.side = side;
+        this.q = q; this.r = r;
+        this.hp = 1; // single hit to capture for simplicity
+        this.status = {}; // { immobilized: turns, disarmed: turns, silenced: turns }
+        this.alive = true;
+        this.owner = null;
+      }
+      get type() { return PIECE_TYPES[this.typeKey]; }
+      is(status) { return (this.status[status] || 0) > 0; }
+    }
+
+    class GameState {
+      constructor(puzzle) {
+        this.puzzle = puzzle;
+        this.turnLimit = puzzle.limit;
+        this.turnsLeft = puzzle.limit;
+        this.side = SIDES.Player;
+        this.ply = 1; // half-moves count
+        this.board = new Map(); // key -> piece
+        this.pieces = new Map(); // id -> piece
+        this.history = [];
+        this.teamMode = false;
+        this.currentController = 'P1'; // P1 or P2 for team mode
+        this.solutionTrace = [];
+        this.movedThisTurn = new Set(); // pieceIds that have acted this side's turn
+        this.populate(puzzle.setup.pieces);
+        this.recomputeAuras();
+      }
+      populate(pieces) {
+        let idx = 1;
+        for (const p of pieces) {
+          const pc = new Piece('U'+idx++, p.type, p.side, p.q, p.r);
+          this.pieces.set(pc.id, pc);
+          this.board.set(axialKey(pc.q, pc.r), pc.id);
+        }
+      }
+      clone() {
+        const gs = new GameState(this.puzzle);
+        gs.turnLimit = this.turnLimit;
+        gs.turnsLeft = this.turnsLeft;
+        gs.side = this.side;
+        gs.ply = this.ply;
+        gs.board = new Map(this.board);
+        gs.pieces = new Map();
+        for (const [id, p] of this.pieces) {
+          const copy = new Piece(p.id, p.typeKey, p.side, p.q, p.r);
+          copy.hp = p.hp; copy.alive = p.alive; copy.status = { ...p.status };
+          copy.owner = p.owner || null;
+          gs.pieces.set(id, copy);
+        }
+        gs.history = this.history.slice();
+        gs.teamMode = this.teamMode;
+        gs.currentController = this.currentController;
+        gs.movedThisTurn = new Set(this.movedThisTurn);
+        return gs;
+      }
+      pieceAt(q, r) { const id = this.board.get(axialKey(q, r)); return id ? this.pieces.get(id) : null; }
+      hasEnemyAt(side, q, r) { const pc = this.pieceAt(q, r); return pc && pc.side !== side; }
+      inBounds(q, r) { return distance({q, r}, {q:0, r:0}) <= BOARD_RADIUS; }
+      forEachPiece(cb) { for (const p of this.pieces.values()) if (p.alive) cb(p); }
+      removePiece(piece) { piece.alive = false; this.board.delete(axialKey(piece.q, piece.r)); }
+      movePiece(piece, q, r) {
+        this.board.delete(axialKey(piece.q, piece.r));
+        piece.q = q; piece.r = r;
+        this.board.set(axialKey(piece.q, piece.r), piece.id);
+      }
+      endTurn() {
+        this.side = (this.side === SIDES.Player) ? SIDES.Enemy : SIDES.Player;
+        if (this.side === SIDES.Player) this.turnsLeft -= 1;
+        this.ply += 1;
+        // Decrement statuses at start of each unit's own side? Simpler: at each half-turn
+        this.forEachPiece(p => {
+          for (const k of Object.keys(p.status)) p.status[k] = Math.max(0, (p.status[k]||0) - 1);
+        });
+        this.recomputeAuras();
+        this.movedThisTurn = new Set();
+      }
+      recomputeAuras() {
+        // Clear dynamic auras every recompute
+        this.forEachPiece(p => {
+          p._inDisarmAura = false;
+          p._inSilenceAura = false;
+        });
+        this.forEachPiece(p => {
+          const t = p.type;
+          if (!t.aura) return;
+          const rad = t.aura.disarm || t.aura.silence || 0;
+          const neigh = tilesWithin(p.q, p.r, rad);
+          for (const n of neigh) {
+            const target = this.pieceAt(n.q, n.r);
+            if (!target || target.side === p.side) continue;
+            if (t.aura.disarm) target._inDisarmAura = true;
+            if (t.aura.silence) target._inSilenceAura = true;
+          }
+        });
+      }
+      isBlockedLine(a, b) {
+        // returns true if any blocking piece lies strictly between a and b
+        const line = hexLine(a, b);
+        if (line.length <= 2) return false;
+        for (let i = 1; i < line.length - 1; i++) {
+          const t = this.pieceAt(line[i].q, line[i].r);
+          if (t && PIECE_TYPES[t.typeKey].block) return true;
+          if (t) return true; // default: any unit blocks LoS
+        }
+        return false;
+      }
+      isCommanderDefeated(side) {
+        let alive = false;
+        this.forEachPiece(p => { if (p.side === side && p.typeKey === 'Commander' && p.alive) alive = true; });
+        return !alive;
+      }
+    }
+
+    function tilesWithin(q, r, rad) {
+      const res = [];
+      for (let dq = -rad; dq <= rad; dq++) {
+        for (let dr = Math.max(-rad, -dq-rad); dr <= Math.min(rad, -dq+rad); dr++) {
+          const q2 = q + dq, r2 = r + dr;
+          res.push({ q: q2, r: r2 });
+        }
+      }
+      return res;
+    }
+    function hexLine(a, b) {
+      const N = distance(a, b);
+      const results = [];
+      for (let i = 0; i <= N; i++) {
+        const t = i / (N || 1);
+        const c = cubeRound({ x: lerp(a.q, b.q, t), y: lerp(-a.q-a.r, -b.q-b.r, t), z: lerp(a.r, b.r, t) });
+        results.push({ q: c.q, r: c.r });
+      }
+      return results;
+    }
+    function lerp(a,b,t){ return a + (b-a)*t; }
+
+    // --- Move Generation ---
+    function legalMoves(gs, piece) {
+      const t = piece.type;
+      const moves = [];
+      if (piece.is(STATUS_FLAGS.immobilized)) return moves;
+      // movement
+      const maxStep = t.move || 0;
+      const frontier = [{ q: piece.q, r: piece.r, d: 0 }];
+      const seen = new Set([axialKey(piece.q, piece.r)]);
+      while (frontier.length) {
+        const cur = frontier.shift();
+        for (const nb of neighbors(cur.q, cur.r)) {
+          if (!gs.inBounds(nb.q, nb.r)) continue;
+          const key = axialKey(nb.q, nb.r);
+          if (seen.has(key)) continue;
+          const occ = gs.pieceAt(nb.q, nb.r);
+          if (occ && occ.side === piece.side) continue; // friendly occupied
+          const nextD = cur.d + 1;
+           if (!t.leap && occ) {
+            // can capture if enemy and at next step only
+            if (nextD <= maxStep && occ.side !== piece.side && t.melee && !piece.is(STATUS_FLAGS.disarmed) && !piece._inDisarmAura && !PIECE_TYPES[occ.typeKey]?.unkillable) {
+              moves.push({ type: 'move', to: { q: nb.q, r: nb.r }, capture: occ.id });
+            }
+            continue;
+          }
+          if (nextD <= maxStep) {
+            moves.push({ type: 'move', to: { q: nb.q, r: nb.r } });
+            frontier.push({ q: nb.q, r: nb.r, d: nextD });
+          }
+        }
+      }
+      // Ranged attacks
+      if (t.ranged && !piece.is(STATUS_FLAGS.disarmed) && !piece._inDisarmAura) {
+        const rr = t.ranged.range;
+        const tiles = tilesWithin(piece.q, piece.r, rr);
+        for (const c of tiles) {
+          if (c.q === piece.q && c.r === piece.r) continue;
+          if (!gs.inBounds(c.q, c.r)) continue;
+          const dist = distance({ q: piece.q, r: piece.r }, c);
+          if (dist < 1 || dist > rr) continue;
+          if (t.ranged.los && gs.isBlockedLine({ q: piece.q, r: piece.r }, c)) continue;
+          const target = gs.pieceAt(c.q, c.r);
+          if (target && target.side !== piece.side && !PIECE_TYPES[target.typeKey]?.unkillable) {
+            moves.push({ type: 'ranged', to: { q: c.q, r: c.r }, target: target.id, attackType: 'physical' });
+          }
+        }
+      }
+      // Spell attacks
+      if (t.spell && !piece.is(STATUS_FLAGS.silenced) && !piece._inSilenceAura) {
+        const rr = t.spell.range;
+        const tiles = tilesWithin(piece.q, piece.r, rr);
+        for (const c of tiles) {
+          if (c.q === piece.q && c.r === piece.r) continue;
+          if (!gs.inBounds(c.q, c.r)) continue;
+          const dist = distance({ q: piece.q, r: piece.r }, c);
+          if (dist < 1 || dist > rr) continue;
+          if (t.spell.los && gs.isBlockedLine({ q: piece.q, r: piece.r }, c)) continue;
+          const target = gs.pieceAt(c.q, c.r);
+          if (target && target.side !== piece.side && !PIECE_TYPES[target.typeKey]?.unkillable) {
+            moves.push({ type: 'ranged', to: { q: c.q, r: c.r }, target: target.id, attackType: 'spell' });
+          }
+        }
+      }
+      // Abilities
+      if (t.ability && t.ability.immobilize) {
+        const { range, duration } = t.ability.immobilize;
+        const tiles = tilesWithin(piece.q, piece.r, range);
+        for (const c of tiles) {
+          if (c.q === piece.q && c.r === piece.r) continue;
+          const target = gs.pieceAt(c.q, c.r);
+          if (target && target.side !== piece.side) {
+            moves.push({ type: 'ability', name: 'immobilize', to: { q: c.q, r: c.r }, target: target.id, duration });
+          }
+        }
+      }
+      return moves;
+    }
+
+    function applyMove(gs, piece, move) {
+      const prev = gs.clone();
+      let desc = '';
+      if (move.type === 'move') {
+        const captured = move.capture ? gs.pieces.get(move.capture) : null;
+        if (captured) { gs.removePiece(captured); desc = `${piece.side} ${piece.type.name} captures ${captured.type.name}`; }
+        else { desc = `${piece.side} ${piece.type.name} moves`; }
+        gs.movePiece(piece, move.to.q, move.to.r);
+        // Berserker AOE on attack
+        if (captured && piece.type.onAttack === 'aoe_adjacent') {
+          for (const nb of neighbors(piece.q, piece.r)) {
+            const t = gs.pieceAt(nb.q, nb.r);
+            if (t && t.side !== piece.side) gs.removePiece(t);
+          }
+          desc += ' with a whirlwind!';
+        }
+      } else if (move.type === 'ranged') {
+        const target = gs.pieces.get(move.target);
+        if (!target || !target.alive) return { ok: false, error: 'Invalid target' };
+        if (PIECE_TYPES[target.typeKey]?.unkillable) return { ok: false, error: 'Target is immune' };
+        // Line-of-sight block check for Shieldbearer
+        const atkOrigin = { q: piece.q, r: piece.r };
+        const atkTarget = { q: target.q, r: target.r };
+        if (PIECE_TYPES[target.typeKey].block) return { ok: false, error: 'Cannot target shield directly' };
+        const losRequired = move.attackType === 'physical' ? !!piece.type.ranged?.los : !!piece.type.spell?.los;
+        if (losRequired && gs.isBlockedLine(atkOrigin, atkTarget)) return { ok: false, error: 'Line of sight blocked' };
+        gs.removePiece(target);
+        desc = `${piece.side} ${piece.type.name} ${move.attackType==='spell'?'casts':'shoots'} ${PIECE_TYPES[target.typeKey].name}`;
+      } else if (move.type === 'ability' && move.name === 'immobilize') {
+        const target = gs.pieces.get(move.target);
+        if (!target || !target.alive) return { ok: false, error: 'Invalid target' };
+        if (PIECE_TYPES[target.typeKey]?.unkillable) return { ok: false, error: 'Target is immune' };
+        target.status[STATUS_FLAGS.immobilized] = Math.max(target.status[STATUS_FLAGS.immobilized]||0, move.duration||1);
+        desc = `${piece.side} ${piece.type.name} immobilizes ${target.type.name}`;
+      }
+      gs.history.push({ move, pieceId: piece.id, desc, snapshot: prev });
+      gs.recomputeAuras();
+      return { ok: true, desc };
+    }
+
+    // --- Simple AI ---
+    function aiMove(gs) {
+      // 1) If can capture player Commander, do it
+      const enemyPieces = [];
+      gs.forEachPiece(p => { if (p.side === SIDES.Enemy) enemyPieces.push(p); });
+      const playerCommander = Array.from(gs.pieces.values()).find(p=>p.alive && p.side===SIDES.Player && p.typeKey==='Commander');
+      for (const p of enemyPieces) {
+        const moves = legalMoves(gs, p);
+        for (const m of moves) {
+          if ((m.type==='move' && m.capture && m.capture===playerCommander?.id) || (m.type==='ranged' && m.target===playerCommander?.id)) {
+            return { piece: p, move: m };
+          }
+        }
+      }
+      // 2) Otherwise, move closest attacker towards nearest player piece
+      let best = null, bestScore = -1e9;
+      const playerPieces = Array.from(gs.pieces.values()).filter(p=>p.alive && p.side===SIDES.Player);
+      for (const p of enemyPieces) {
+        const moves = legalMoves(gs, p);
+        for (const m of moves) {
+          let score = 0;
+          if (m.type==='move' && m.capture) score += 50 + (PIECE_TYPES[gs.pieces.get(m.capture).typeKey].value||1);
+          if (m.type==='ranged') score += 40 + (PIECE_TYPES[gs.pieces.get(m.target).typeKey].value||1);
+          // prefer closer to commander
+          const cmd = playerCommander;
+          if (m.type==='move' && cmd) score += 10 - distance({q:m.to.q,r:m.to.r},{q:cmd.q,r:cmd.r});
+          if (score > bestScore) { bestScore = score; best = { piece: p, move: m }; }
+        }
+      }
+      return best;
+    }
+
+    // --- Renderer ---
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+    let viewOffset = { x: canvas.width/2, y: canvas.height/2 };
+    let selectedId = null;
+    let highlightedMoves = [];
+
+    function drawBoard(gs) {
+      ctx.clearRect(0,0,canvas.width, canvas.height);
+      // Tiles
+      for (let q = -BOARD_RADIUS; q <= BOARD_RADIUS; q++) {
+        for (let r = -BOARD_RADIUS; r <= BOARD_RADIUS; r++) {
+          if ((Math.abs(q + r) > BOARD_RADIUS) || (Math.abs(q) > BOARD_RADIUS) || (Math.abs(r) > BOARD_RADIUS)) continue;
+          const { x, y } = axialToPixel(q, r);
+          drawHex(x + viewOffset.x, y + viewOffset.y, TILE_RADIUS - 2, ((q + r) & 1) ? getVar('--hex-a') : getVar('--hex-b'));
+        }
+      }
+      // Highlights
+      for (const mv of highlightedMoves) {
+        const { x, y } = axialToPixel(mv.to.q, mv.to.r);
+        drawHexStroke(x + viewOffset.x, y + viewOffset.y, TILE_RADIUS - 4, mv.type==='move' ? '#6bffa8' : '#ffd56b', 3, [6,4]);
+      }
+      // Pieces
+      const sorted = Array.from(gs.pieces.values()).filter(p=>p.alive).sort((a,b)=>a.side===SIDES.Enemy?1:-1);
+      for (const p of sorted) {
+        const { x, y } = axialToPixel(p.q, p.r);
+        drawPiece(x + viewOffset.x, y + viewOffset.y, p);
+      }
+    }
+    function getVar(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+    function drawHex(cx, cy, r, fill) {
+      ctx.beginPath();
+      const pts = [];
+      for (let i = 0; i < 6; i++) {
+        const angle = Math.PI/3 * i + Math.PI/6;
+        const x = cx + r * Math.cos(angle);
+        const y = cy + r * Math.sin(angle);
+        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        pts.push({x,y});
+      }
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = '#2c3358';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    function drawHexStroke(cx, cy, r, color, width=2, dash=[]) {
+      ctx.save();
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const angle = Math.PI/3 * i + Math.PI/6;
+        const x = cx + r * Math.cos(angle);
+        const y = cy + r * Math.sin(angle);
+        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.closePath();
+      ctx.setLineDash(dash);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.stroke();
+      ctx.restore();
+    }
+    function drawPiece(cx, cy, piece) {
+      const color = piece.side === SIDES.Player ? getVar('--p1') : getVar('--p2');
+      drawHex(cx, cy, TILE_RADIUS - 14, 'rgba(0,0,0,0.12)');
+      drawHexStroke(cx, cy, TILE_RADIUS - 12, color, 4);
+      // aura indicators
+      if (piece.type.aura) {
+        const auraColor = piece.type.aura.disarm ? '#ff9f9f' : '#9fb6ff';
+        drawHexStroke(cx, cy, TILE_RADIUS, auraColor, 1.5, [3,6]);
+      }
+      if (PIECE_TYPES[piece.typeKey]?.unkillable) {
+        drawHexStroke(cx, cy, TILE_RADIUS - 6, '#ffd56b', 2, [2,4]);
+      }
+      ctx.fillStyle = color;
+      ctx.font = 'bold 20px Inter, system-ui';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(piece.type.icon, cx, cy-2);
+      // owner badge (team mode)
+      if (GAME?.teamMode && piece.side === SIDES.Player && piece.owner) {
+        const ownerColor = piece.owner === 'P1' ? '#7c9cff' : '#f5b971';
+        drawBadge(cx - 22, cy - 18, ownerColor, piece.owner);
+      }
+      // statuses
+      let badgeX = cx; let badgeY = cy + 16; let dx = 16;
+      if (piece.is(STATUS_FLAGS.immobilized)) drawBadge(badgeX - dx, badgeY, '#ffd56b', 'I');
+      if (piece.is(STATUS_FLAGS.disarmed) || piece._inDisarmAura) drawBadge(badgeX, badgeY, '#ff6b6b', 'D');
+      if (piece.is(STATUS_FLAGS.silenced) || piece._inSilenceAura) drawBadge(badgeX + dx, badgeY, '#9fb6ff', 'S');
+    }
+    function drawBadge(x, y, color, text) {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI*2); ctx.fillStyle = color; ctx.fill();
+      ctx.fillStyle = '#0b1022'; ctx.font = 'bold 12px Inter'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(text, x, y+0.5);
+      ctx.restore();
+    }
+
+    // --- Interaction ---
+    canvas.addEventListener('click', onCanvasClick);
+    function onCanvasClick(ev) {
+      if (!GAME) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = ev.clientX - rect.left - viewOffset.x;
+      const y = ev.clientY - rect.top - viewOffset.y;
+      const { q, r } = pixelToAxial(x, y);
+      if (!GAME.inBounds(q, r)) return;
+      const pc = GAME.pieceAt(q, r);
+      if (selectedId) {
+        const selected = GAME.pieces.get(selectedId);
+        if (pc && pc.side === selected.side && pc.id !== selected.id) {
+          // switch selection
+          selectPiece(pc.id);
+          return;
+        }
+        // Try to enact a highlighted move to this tile
+        const mv = highlightedMoves.find(m => m.to.q === q && m.to.r === r);
+        if (mv) {
+          doPlayerAction(selected, mv);
+          return;
+        }
+        // If clicked an enemy and there is a ranged/ability move specifically targeting it
+        if (pc && pc.side !== selected.side) {
+          const mv2 = highlightedMoves.find(m => (m.type==='ranged' || m.type==='ability') && m.target === pc.id);
+          if (mv2) { doPlayerAction(selected, mv2); return; }
+        }
+        // otherwise clear selection
+        selectPiece(null);
+      } else {
+        if (pc && pc.side === SIDES.Player) selectPiece(pc.id);
+      }
+      drawBoard(GAME);
+    }
+
+    function selectPiece(pieceId) {
+      selectedId = pieceId;
+      highlightedMoves = [];
+      const info = el('selected');
+      const abilities = el('abilities'); abilities.innerHTML = '';
+      if (!pieceId) { info.innerText = 'None'; return; }
+      const piece = GAME.pieces.get(pieceId);
+      if (!piece || !piece.alive) { info.innerText = 'None'; return; }
+      if (GAME.side !== piece.side) { info.innerText = 'Waiting for opponent...'; return; }
+      if (GAME.teamMode && piece.side === SIDES.Player && piece.owner && piece.owner !== GAME.currentController) {
+        info.innerText = `Not your piece. Controller ${GAME.currentController} only.`;
+        highlightedMoves = [];
+        drawBoard(GAME);
+        return;
+      }
+      if (GAME.side === SIDES.Player && GAME.movedThisTurn.has(piece.id)) {
+        info.innerText = 'Already acted this turn';
+        highlightedMoves = [];
+        drawBoard(GAME);
+        return;
+      }
+      const moves = legalMoves(GAME, piece);
+      highlightedMoves = moves;
+      info.innerText = piece.type.name + ' at ' + axialKey(piece.q, piece.r) + (piece.owner ? ` • ${piece.owner}` : '');
+      // ability buttons (for clarity only)
+      for (const mv of moves) {
+        if (mv.type === 'ranged' || mv.type === 'ability') {
+          const btn = document.createElement('button');
+          btn.className = 'secondary';
+          btn.innerText = mv.type === 'ranged' ? (mv.attackType==='spell' ? 'Cast' : 'Shoot') : 'Immobilize';
+          btn.onclick = () => { selectPiece(pieceId); /* refresh */ };
+          abilities.appendChild(btn);
+        }
+      }
+      drawBoard(GAME);
+    }
+
+    // --- Gameplay Flow ---
+    function log(msg, cls='') { const d = document.createElement('div'); d.textContent = msg; if (cls) d.className = cls; el('log').prepend(d); }
+    function refreshHud() {
+      el('turns-left').innerText = GAME.turnsLeft;
+      el('mode-indicator').innerText = GAME.teamMode ? `Team (${GAME.currentController})` : 'Solo';
+      el('status').innerHTML = '';
+      if (GAME.side === SIDES.Player) {
+        const remaining = playerPiecesWithActions(GAME).length;
+        el('status').innerHTML = `<span class="pill">Your turn</span> <span class=\"pill\">Actions left: ${remaining}</span>`;
+      } else el('status').innerHTML = '<span class="pill">Enemy turn</span>';
+      // controller swap availability
+      const canSwap = !!(GAME.teamMode && GAME.side === SIDES.Player);
+      document.getElementById('btn-swap-controller').disabled = !canSwap;
+    }
+    function doPlayerAction(piece, move) {
+      if (GAME.side !== SIDES.Player) return;
+      if (GAME.movedThisTurn.has(piece.id)) { log('That unit has already acted.', 'warning'); return; }
+      const fromKey = axialKey(piece.q, piece.r);
+      const result = applyMove(GAME, piece, move);
+      if (!result.ok) { log(result.error, 'danger'); return; }
+      GAME.solutionTrace.push({ side: SIDES.Player, action: move.type, from: fromKey, to: axialKey(move.to.q, move.to.r) });
+      log(result.desc);
+      GAME.movedThisTurn.add(piece.id);
+      postMoveCheckAndAdvance(true, false);
+    }
+    function postMoveCheckAndAdvance(fromPlayer=false, forceEnd=false) {
+      if (GAME.isCommanderDefeated(SIDES.Enemy)) { onVictory(); return; }
+      // If player still has actions and not forcing end, keep the turn
+      if (GAME.side === SIDES.Player && fromPlayer && !forceEnd) {
+        const remaining = playerPiecesWithActions(GAME).length;
+        if (remaining > 0) { refreshHud(); drawBoard(GAME); return; }
+      }
+      // Player turn ends -> enemy moves all units once
+      if (GAME.side === SIDES.Player) {
+        GAME.endTurn();
+        refreshHud();
+        window.setTimeout(()=>{
+          enemyFullTurn(GAME);
+          if (GAME.isCommanderDefeated(SIDES.Player)) { onDefeat('Your commander fell.'); return; }
+          GAME.endTurn();
+          refreshHud();
+          if (GAME.turnsLeft <= 0) {
+            if (GAME.isCommanderDefeated(SIDES.Enemy)) onVictory();
+            else {
+              GAME.forEachPiece(p=>{ if (p.side===SIDES.Player) GAME.removePiece(p); });
+              drawBoard(GAME);
+              setTimeout(()=> onDefeat('The Doom has claimed your army.'), 150);
+              return;
+            }
+          }
+          selectPiece(null);
+          drawBoard(GAME);
+        }, 350);
+      }
+    }
+
+    function playerPiecesWithActions(gs) {
+      const res = [];
+      gs.forEachPiece(p=>{
+        if (p.side!==SIDES.Player || !p.alive) return;
+        if (gs.teamMode && p.owner && p.owner !== gs.currentController) return;
+        if (gs.movedThisTurn.has(p.id)) return;
+        const moves = legalMoves(gs, p);
+        if (moves.length>0) res.push({ piece: p, moves });
+      });
+      return res;
+    }
+
+    function enemyFullTurn(gs) {
+      const actors = [];
+      gs.forEachPiece(p=>{ if (p.side===SIDES.Enemy && p.alive) actors.push(p); });
+      for (const p of actors) {
+        const mv = aiMoveForPiece(gs, p);
+        if (!mv) continue;
+        const result = applyMove(gs, p, mv);
+        if (result.ok) log(result.desc);
+      }
+    }
+
+    function aiMoveForPiece(gs, piece) {
+      const moves = legalMoves(gs, piece);
+      if (!moves.length) return null;
+      let best = null, bestScore = -1e9;
+      const playerCommander = Array.from(gs.pieces.values()).find(p=>p.alive && p.side===SIDES.Player && p.typeKey==='Commander');
+      for (const m of moves) {
+        let score = 0;
+        if (m.type==='move' && m.capture) score += 50 + (PIECE_TYPES[gs.pieces.get(m.capture).typeKey].value||1);
+        if (m.type==='ranged') score += 40 + (PIECE_TYPES[gs.pieces.get(m.target).typeKey].value||1);
+        if (m.type==='move' && playerCommander) score += 10 - distance({q:m.to.q,r:m.to.r},{q:playerCommander.q,r:playerCommander.r});
+        if (score > bestScore) { bestScore = score; best = m; }
+      }
+      return best;
+    }
+    function onVictory() {
+      log('You captured the enemy Commander!', 'success');
+      // mark completed
+      const st = CURRENT_USER.profile.chapters[CURRENT_CHAPTER.id];
+      if (!st.completed.includes(CURRENT_PUZZLE.id)) st.completed.push(CURRENT_PUZZLE.id);
+      // unlock next
+      const idx = CURRENT_CHAPTER.puzzles.findIndex(p=>p.id===CURRENT_PUZZLE.id);
+      const next = CURRENT_CHAPTER.puzzles[idx+1];
+      if (next && !st.unlocked.includes(next.id)) st.unlocked.push(next.id);
+      saveProfile();
+      setTimeout(()=>{ alert('Victory! Puzzle complete.'); exitToMenu(); }, 50);
+    }
+    function onDefeat(msg) { log('Defeat: '+msg, 'danger'); setTimeout(()=>{ alert('Defeat: '+msg); }, 50); }
+
+    // --- Puzzle Flow ---
+    function startPuzzle(p) {
+      CURRENT_PUZZLE = p;
+      GAME = new GameState(p);
+      ensureDoomPiece(GAME);
+      selectedId = null; highlightedMoves = [];
+      el('game-title').innerText = p.name;
+      el('objective').innerText = 'Capture the enemy Commander within '+p.limit+' turns.';
+      el('puzzle-desc').innerText = p.description;
+      el('puzzle-hint').innerText = p.hint || '';
+      el('turns-left').innerText = p.limit;
+      buildLegend();
+      el('log').innerHTML = '';
+      selectPiece(null);
+      refreshHud();
+      drawBoard(GAME);
+      showScreen('game');
+    }
+    function openPuzzleIntro(p) {
+      const m = document.getElementById('story-modal');
+      if (!m) return startPuzzle(p);
+      document.getElementById('story-modal-title').innerText = p.name;
+      document.getElementById('story-modal-text').innerText = CURRENT_CHAPTER.text;
+      document.getElementById('story-modal-desc').innerText = p.description;
+      document.getElementById('story-modal-hint').innerText = p.hint || '';
+      document.getElementById('story-modal-turns').innerText = `${p.limit} turns`;
+      m.classList.add('active');
+      const begin = document.getElementById('story-modal-begin');
+      const cancel = document.getElementById('story-modal-cancel');
+      const off = ()=>{ m.classList.remove('active'); begin.onclick=null; cancel.onclick=null; };
+      begin.onclick = ()=>{ off(); startPuzzle(p); };
+      cancel.onclick = ()=>{ off(); };
+    }
+    function exitToMenu() { showScreen('menu'); renderMenu(); }
+
+    function buildLegend() {
+      const wrap = el('legend'); wrap.innerHTML = '';
+      for (const key of PIECE_ORDER) {
+        const t = PIECE_TYPES[key];
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        const sw = document.createElement('div'); sw.className = 'legend-swatch'; sw.style.background = 'rgba(0,0,0,0.12)'; sw.style.borderColor = getVar('--p1');
+        const name = document.createElement('div'); name.innerHTML = `<strong>${t.icon}</strong> ${t.name}<div class="muted" style="font-size:12px;">${t.desc}</div>`;
+        item.appendChild(sw); item.appendChild(name); wrap.appendChild(item);
+      }
+    }
+
+    // --- Buttons ---
+    el('btn-endturn').addEventListener('click', ()=>{
+      if (!GAME || GAME.side !== SIDES.Player) return;
+      log('You end your turn.');
+      postMoveCheckAndAdvance(false, true);
+    });
+    el('btn-undo').addEventListener('click', ()=>{
+      if (!GAME || !GAME.history.length) return;
+      // revert to last player snapshot (two plies back if just after AI?)
+      const last = GAME.history[GAME.history.length-1].snapshot;
+      GAME = last; selectedId = null; highlightedMoves = [];
+      log('Undo', 'warning');
+      refreshHud(); drawBoard(GAME);
+    });
+    el('btn-reset').addEventListener('click', ()=>{ if (CURRENT_PUZZLE) startPuzzle(CURRENT_PUZZLE); });
+    el('btn-exit').addEventListener('click', exitToMenu);
+    el('btn-hint').addEventListener('click', ()=>{
+      if (!CURRENT_PUZZLE?.hint) return;
+      alert(CURRENT_PUZZLE.hint);
+    });
+    el('btn-check-solution').addEventListener('click', ()=>{
+      if (!CURRENT_PUZZLE?.expected) { alert('No strict solution check for this puzzle.'); return; }
+      const ok = compareSolution(GAME.solutionTrace, CURRENT_PUZZLE.expected);
+      alert(ok ? 'So far so good!' : 'Your sequence deviates from the intended solution.');
+    });
+    el('btn-toggle-team').addEventListener('click', ()=>{
+      if (!GAME) return;
+      GAME.teamMode = !GAME.teamMode;
+      if (GAME.teamMode) {
+        // assign owners alternating among player's pieces
+        let toggle = true;
+        GAME.forEachPiece(p=>{
+          if (p.side === SIDES.Player) { p.owner = toggle ? 'P1' : 'P2'; toggle = !toggle; }
+        });
+        GAME.currentController = 'P1';
+        log('Team Mode enabled. P1 starts.');
+      } else {
+        GAME.forEachPiece(p=>{ if (p.side === SIDES.Player) p.owner = null; });
+        log('Team Mode disabled.');
+      }
+      refreshHud();
+      drawBoard(GAME);
+    });
+    el('btn-swap-controller').addEventListener('click', ()=>{
+      if (!GAME || !GAME.teamMode || GAME.side !== SIDES.Player) return;
+      GAME.currentController = (GAME.currentController === 'P1') ? 'P2' : 'P1';
+      log('Controller switched to ' + GAME.currentController);
+      refreshHud();
+      drawBoard(GAME);
+    });
+
+    function compareSolution(trace, expected) {
+      for (let i = 0; i < Math.min(trace.length, expected.length); i++) {
+        const a = trace[i], b = expected[i];
+        if (a.side !== b.side || a.action !== b.action || a.from !== b.from || a.to !== b.to) return false;
+      }
+      return true;
+    }
+
+    // --- Login wiring ---
+    el('btn-login').addEventListener('click', ()=>{
+      const u = el('login-username').value.trim();
+      const p = el('login-password').value;
+      const res = login(u, p);
+      if (!res.ok) { alert(res.error); return; }
+      showScreen('menu'); renderMenu();
+    });
+    el('btn-register').addEventListener('click', ()=>{
+      const u = el('login-username').value.trim();
+      const p = el('login-password').value;
+      const res = register(u, p);
+      if (!res.ok) { alert(res.error); return; }
+      alert('Registered! You can now login.');
+    });
+    el('btn-logout').addEventListener('click', ()=>{ Storage.clearSession(); location.reload(); });
+
+    // --- Boot ---
+    (function boot(){
+      if (loadSession()) { showScreen('menu'); renderMenu(); }
+      else { showScreen('login'); }
+      drawBoard(new GameState(STORY[0].puzzles[0]));
+    })();
+
+    // Doom piece helpers
+    function ensureDoomPiece(gs) {
+      const spot = findEmptyEdgeTile(gs) || { q: BOARD_RADIUS, r: -BOARD_RADIUS };
+      const id = 'DOOM';
+      if (![...gs.pieces.keys()].includes(id)) {
+        const doom = new Piece(id, 'Doom', SIDES.Enemy, spot.q, spot.r);
+        gs.pieces.set(id, doom);
+        gs.board.set(axialKey(spot.q, spot.r), id);
+      }
+    }
+    function findEmptyEdgeTile(gs) {
+      const tiles = [];
+      for (let q = -BOARD_RADIUS; q <= BOARD_RADIUS; q++) {
+        for (let r = -BOARD_RADIUS; r <= BOARD_RADIUS; r++) {
+          if (!gs.inBounds(q, r)) continue;
+          if (distance({q, r}, {q:0, r:0}) !== BOARD_RADIUS) continue;
+          if (!gs.pieceAt(q, r)) tiles.push({ q, r });
+        }
+      }
+      return tiles[0] || null;
+    }
+  </script>
+</body>
+</html>
+
