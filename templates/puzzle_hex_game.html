@@ -849,6 +849,7 @@
     let viewOffset = { x: canvas.width/2, y: canvas.height/2 };
     let selectedId = null;
     let highlightedMoves = [];
+    let PENDING_ABILITY = null; // { pieceId, type: 'ranged'|'ability', attackType?, name? }
 
     // --- Responsive sizing ---
     function computeBoardBoundsForRadius(rad) {
@@ -897,7 +898,11 @@
       // Highlights
       for (const mv of highlightedMoves) {
         const { x, y } = axialToPixel(mv.to.q, mv.to.r);
-        drawHexStroke(x + viewOffset.x, y + viewOffset.y, TILE_RADIUS - 4, mv.type==='move' ? '#6bffa8' : '#ffd56b', 3, [6,4]);
+        let color = '#ffd56b';
+        if (mv.type === 'move') color = '#6bffa8';
+        if (mv.type === 'ranged' && mv.attackType==='spell') color = '#9fb6ff';
+        if (mv.type === 'ability' && mv.name==='immobilize') color = '#ffd56b';
+        drawHexStroke(x + viewOffset.x, y + viewOffset.y, TILE_RADIUS - 4, color, 3, [6,4]);
       }
       // Pieces
       const sorted = Array.from(gs.pieces.values()).filter(p=>p.alive).sort((a,b)=>a.side===SIDES.Enemy?1:-1);
@@ -993,6 +998,18 @@
           selectPiece(pc.id);
           return;
         }
+        // If targeting via ability button, restrict to that move type
+        if (PENDING_ABILITY && PENDING_ABILITY.pieceId === selected.id) {
+          let mv = highlightedMoves.find(m => m.type === PENDING_ABILITY.type &&
+            (!PENDING_ABILITY.attackType || m.attackType === PENDING_ABILITY.attackType) &&
+            (!PENDING_ABILITY.name || m.name === PENDING_ABILITY.name) && m.to.q === q && m.to.r === r);
+          if (!mv && pc && pc.side !== selected.side) {
+            mv = highlightedMoves.find(m => m.type === PENDING_ABILITY.type &&
+              (!PENDING_ABILITY.attackType || m.attackType === PENDING_ABILITY.attackType) &&
+              (!PENDING_ABILITY.name || m.name === PENDING_ABILITY.name) && m.target === pc.id);
+          }
+          if (mv) { enqueueAction(selected, mv); PENDING_ABILITY = null; return; }
+        }
         // Try to enact a highlighted move to this tile
         const mv = highlightedMoves.find(m => m.to.q === q && m.to.r === r);
         if (mv) {
@@ -1036,15 +1053,39 @@
       const moves = legalMoves(GAME, piece);
       highlightedMoves = moves;
       info.innerText = piece.type.name + ' at ' + axialKey(piece.q, piece.r) + (piece.owner ? ` • ${piece.owner}` : '');
-      // ability buttons (for clarity only)
-      for (const mv of moves) {
-        if (mv.type === 'ranged' || mv.type === 'ability') {
-          const btn = document.createElement('button');
-          btn.className = 'secondary';
-          btn.innerText = mv.type === 'ranged' ? (mv.attackType==='spell' ? 'Cast' : 'Shoot') : 'Immobilize';
-          btn.onclick = () => { selectPiece(pieceId); /* refresh */ };
-          abilities.appendChild(btn);
-        }
+      // Ability buttons (interactive targeting)
+      const hasShoot = moves.some(m => m.type==='ranged' && m.attackType==='physical');
+      const hasCast = moves.some(m => m.type==='ranged' && m.attackType==='spell');
+      const hasImm = moves.some(m => m.type==='ability' && m.name==='immobilize');
+      if (hasShoot) {
+        const btn = document.createElement('button');
+        btn.className = 'secondary'; btn.innerText = 'Shoot';
+        btn.onclick = () => {
+          PENDING_ABILITY = { pieceId, type: 'ranged', attackType: 'physical' };
+          highlightedMoves = moves.filter(m=>m.type==='ranged' && m.attackType==='physical');
+          drawBoard(GAME);
+        };
+        abilities.appendChild(btn);
+      }
+      if (hasCast) {
+        const btn = document.createElement('button');
+        btn.className = 'secondary'; btn.innerText = 'Cast';
+        btn.onclick = () => {
+          PENDING_ABILITY = { pieceId, type: 'ranged', attackType: 'spell' };
+          highlightedMoves = moves.filter(m=>m.type==='ranged' && m.attackType==='spell');
+          drawBoard(GAME);
+        };
+        abilities.appendChild(btn);
+      }
+      if (hasImm) {
+        const btn = document.createElement('button');
+        btn.className = 'secondary'; btn.innerText = 'Immobilize';
+        btn.onclick = () => {
+          PENDING_ABILITY = { pieceId, type: 'ability', name: 'immobilize' };
+          highlightedMoves = moves.filter(m=>m.type==='ability' && m.name==='immobilize');
+          drawBoard(GAME);
+        };
+        abilities.appendChild(btn);
       }
       drawBoard(GAME);
     }
