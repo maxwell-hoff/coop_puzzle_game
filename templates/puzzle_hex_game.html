@@ -52,6 +52,8 @@
     .topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid #2c3358; }
     .topbar .left, .topbar .right { display: flex; gap: 10px; align-items: center; }
     .content { display: grid; grid-template-columns: 320px 1fr 360px; gap: 12px; padding: 12px; }
+    /* Widen board: collapse left column on game screen */
+    #game-screen .content { grid-template-columns: 1fr 320px; }
     .panel { background: var(--panel); border: 1px solid #2c3358; border-radius: 14px; padding: 12px; overflow: auto; }
     .panel h3 { margin: 8px 0 8px; font-size: 16px; }
     .panel h2 { margin: 6px 0 6px; font-size: 20px; }
@@ -68,6 +70,9 @@
     .pill { padding: 6px 10px; border-radius: 999px; border: 1px solid #2c3358; background: var(--panel-2); font-size: 12px; color: var(--muted); }
 
     .legend { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .collapsible { cursor: pointer; user-select: none; display: flex; align-items: center; justify-content: space-between; }
+    .collapsible::after { content: '▸'; color: var(--muted); font-size: 12px; margin-left: 8px; }
+    .collapsible.expanded::after { content: '▾'; }
     .legend-item { display: flex; gap: 8px; align-items: center; background: var(--panel-2); border: 1px solid #2c3358; padding: 8px; border-radius: 10px; }
     .legend-swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid #2c3358; }
 
@@ -81,6 +86,20 @@
     .modal .footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
     .map-node { cursor: pointer; }
     .map-node.locked { cursor: not-allowed; }
+
+    /* --- Responsive (mobile) --- */
+    @media (max-width: 900px) {
+      .topbar { flex-wrap: wrap; gap: 8px; }
+      .content { grid-template-columns: 1fr; grid-auto-rows: auto; padding: 8px; gap: 8px; }
+      .legend { grid-template-columns: 1fr; }
+      .puzzle-list { grid-template-columns: 1fr; }
+      #menu-screen .content { grid-template-columns: 1fr !important; }
+      #puzzle-map { height: 260px; }
+      #game-screen .content { grid-template-areas: 'board' 'left' 'right'; }
+      #game-screen .content > .board-wrap { grid-area: board; width: 100%; min-height: 60vh; }
+      #game-screen .content > .panel.col:first-of-type { grid-area: left; }
+      #game-screen .content > .panel.col:last-of-type { grid-area: right; }
+    }
   </style>
 </head>
 <body>
@@ -120,12 +139,7 @@
         <button class="secondary" id="btn-logout">Logout</button>
       </div>
     </div>
-    <div class="content" style="grid-template-columns: 440px 1fr;">
-      <div class="panel col">
-        <h2 id="story-title">The Whispering Vale</h2>
-        <div id="story-text" class="muted"></div>
-        <div class="hint" id="story-hint"></div>
-      </div>
+    <div class="content" style="grid-template-columns: 1fr;">
       <div class="panel col" style="overflow:hidden;">
         <div class="spaced"><h3>Puzzles</h3><div class="muted" id="progress-text"></div></div>
         <div id="puzzle-map-wrap" style="width:100%; height:100%; overflow:auto;">
@@ -151,18 +165,19 @@
       </div>
     </div>
     <div class="content">
-      <div class="panel col">
-        <h3>Objective</h3>
-        <div id="objective" class="muted">Capture the enemy Commander within the move limit.</div>
-        <div class="notice" id="puzzle-desc"></div>
-        <div class="hint" id="puzzle-hint"></div>
-        <h3>Legend</h3>
-        <div class="legend" id="legend"></div>
-        <h3>Log</h3>
-        <div id="log" class="col" style="max-height: 220px; overflow:auto; gap: 6px;"></div>
-      </div>
+      <div class="panel col" style="display:none;"></div>
       <div class="board-wrap"><canvas id="board" width="900" height="740"></canvas></div>
-      <div class="panel col">
+      <div class="panel col" style="overflow:auto; max-height: calc(100vh - 120px);">
+        <h3 class="collapsible" data-target="objective-wrap">Objective</h3>
+        <div id="objective-wrap" style="display:none;" class="col">
+          <div id="objective" class="muted">Capture the enemy Commander within the move limit.</div>
+          <div class="notice" id="puzzle-desc"></div>
+          <div class="hint" id="puzzle-hint"></div>
+        </div>
+        <h3 class="collapsible" data-target="legend-wrap">Legend</h3>
+        <div id="legend-wrap" style="display:none;">
+          <div class="legend" id="legend"></div>
+        </div>
         <h3>Selected</h3>
         <div id="selected" class="muted">None</div>
         <div class="actions">
@@ -175,6 +190,16 @@
         <div id="abilities" class="col"></div>
         <h3>Status</h3>
         <div id="status" class="col"></div>
+        <h3>Action Queue</h3>
+        <div id="queue-warning" class="notice" style="display:none;"></div>
+        <div id="action-queue" class="col" style="max-height: 220px; overflow:auto;"></div>
+        <div class="actions">
+          <button id="btn-complete-turn">Complete Turn</button>
+          <button id="btn-clear-queue" class="ghost">Clear Queue</button>
+          <button id="btn-exit-preview" class="secondary" style="display:none;">Exit Preview</button>
+        </div>
+        <h3>Log</h3>
+        <div id="log" class="col" style="max-height: 220px; overflow:auto; gap: 6px;"></div>
       </div>
     </div>
   </div>
@@ -227,7 +252,8 @@
       silenced: 'silenced',
     };
 
-    const TILE_RADIUS = 48; // pixel radius of hex
+    let BASE_TILE_RADIUS = 48;
+    let TILE_RADIUS = BASE_TILE_RADIUS; // pixel radius of hex (will scale to fit)
     const BOARD_RADIUS = 4; // hex radius (distance from center)
     const HEX_W = Math.sqrt(3) * TILE_RADIUS;
     const HEX_H = 2 * TILE_RADIUS * 0.75; // vertical spacing
@@ -371,100 +397,164 @@
     }
 
     // --- Login ---
-    function login(username, password) {
-      const users = Storage.getUsers();
-      if (!users[username]) return { ok: false, error: 'No such user. Register first.' };
-      const passhash = hashString(password);
-      if (users[username].passhash !== passhash) return { ok: false, error: 'Incorrect password.' };
-      Storage.setSession(username);
-      const profile = Storage.getProfile(username) || { chapters: { [CURRENT_CHAPTER.id]: { completed: [], unlocked: [CURRENT_CHAPTER.puzzles[0].id] } } };
-      CURRENT_USER = { username, profile };
-      return { ok: true };
+    async function login(username, password) {
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        
+        const data = await response.json();
+        if (response.ok) {
+          CURRENT_USER = { 
+            username: data.username, 
+            user_id: data.user_id,
+            current_chapter: data.current_chapter 
+          };
+          // Store session token in localStorage for persistence
+          localStorage.setItem('hexp_session', JSON.stringify({ 
+            username: data.username, 
+            user_id: data.user_id,
+            current_chapter: data.current_chapter 
+          }));
+          return { ok: true };
+        } else {
+          return { ok: false, error: data.error };
+        }
+      } catch (error) {
+        return { ok: false, error: 'Network error. Please try again.' };
+      }
     }
-    function register(username, password) {
+    
+    async function register(username, password) {
       if (!username || !password) return { ok: false, error: 'Enter username and password.' };
-      const users = Storage.getUsers();
-      if (users[username]) return { ok: false, error: 'Username already exists.' };
-      users[username] = { passhash: hashString(password), createdAt: Date.now() };
-      Storage.setUsers(users);
-      Storage.setProfile(username, { chapters: { [CURRENT_CHAPTER.id]: { completed: [], unlocked: [CURRENT_CHAPTER.puzzles[0].id] } } });
-      return { ok: true };
+      
+      try {
+        const response = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        
+        const data = await response.json();
+        if (response.ok) {
+          return { ok: true };
+        } else {
+          return { ok: false, error: data.error };
+        }
+      } catch (error) {
+        return { ok: false, error: 'Network error. Please try again.' };
+      }
     }
+    
     function loadSession() {
-      const sess = Storage.getSession();
+      const sess = localStorage.getItem('hexp_session');
       if (!sess) return false;
-      const profile = Storage.getProfile(sess.username) || { chapters: { [CURRENT_CHAPTER.id]: { completed: [], unlocked: [CURRENT_CHAPTER.puzzles[0].id] } } };
-      CURRENT_USER = { username: sess.username, profile };
-      return true;
+      
+      try {
+        const sessionData = JSON.parse(sess);
+        CURRENT_USER = { 
+          username: sessionData.username, 
+          user_id: sessionData.user_id,
+          current_chapter: sessionData.current_chapter 
+        };
+        return true;
+      } catch {
+        return false;
+      }
     }
+    
     function saveProfile() {
-      if (!CURRENT_USER) return;
-      Storage.setProfile(CURRENT_USER.username, CURRENT_USER.profile);
+      // Profile saving is now handled by the backend
+      return;
     }
 
     // --- Menu Populate ---
-    function renderMenu() {
+    async function renderMenu() {
       el('user-tag').innerText = CURRENT_USER.username;
-      el('chapter-index').innerText = '1';
+      el('chapter-index').innerText = CURRENT_USER.current_chapter || '1';
       el('chapter-title').innerText = CURRENT_CHAPTER.title;
-      el('story-title').innerText = CURRENT_CHAPTER.title;
-      el('story-text').innerText = CURRENT_CHAPTER.text;
-      el('story-hint').innerText = CURRENT_CHAPTER.hint;
 
-      const st = CURRENT_USER.profile.chapters[CURRENT_CHAPTER.id] || { completed: [], unlocked: [CURRENT_CHAPTER.puzzles[0].id] };
-      CURRENT_USER.profile.chapters[CURRENT_CHAPTER.id] = st;
-      let done = 0;
-      for (const p of CURRENT_CHAPTER.puzzles) if (st.completed.includes(p.id)) done++;
-      el('progress-text').innerText = `${done}/${CURRENT_CHAPTER.puzzles.length} completed`;
-      renderLineageMap();
+      // Fetch progress from backend
+      try {
+        const response = await fetch('/api/progress');
+        if (response.ok) {
+          const progressData = await response.json();
+          const currentChapterProgress = progressData[CURRENT_USER.current_chapter] || [];
+          let done = 0;
+          for (const p of CURRENT_CHAPTER.puzzles) {
+            const puzzleProgress = currentChapterProgress.find(pp => pp.puzzle_id === p.id);
+            if (puzzleProgress && puzzleProgress.completed) done++;
+          }
+          el('progress-text').innerText = `${done}/${CURRENT_CHAPTER.puzzles.length} completed`;
+          renderLineageMap(currentChapterProgress);
+        }
+      } catch (error) {
+        console.log('Error fetching progress:', error);
+        el('progress-text').innerText = '0/0 completed';
+        renderLineageMap([]);
+      }
     }
 
-    function renderLineageMap() {
+    function renderLineageMap(progressData = []) {
       const svg = document.getElementById('puzzle-map');
       if (!svg) return;
       svg.innerHTML = '';
-      const st = CURRENT_USER.profile.chapters[CURRENT_CHAPTER.id];
       const width = svg.clientWidth || 800;
       const N = CURRENT_CHAPTER.puzzles.length;
-      const margin = 40; const span = Math.max(120, (width - margin*2) / Math.max(1, N-1));
-      const y = 180; const radius = 20;
-      // lines
+      const marginX = 24;
+      const marginY = 24;
+      const radius = 18;
+      const rowGap = 90; // vertical spacing between nodes
+      const totalHeight = marginY*2 + Math.max(0, N-1)*rowGap + 1;
+      svg.setAttribute('height', String(Math.max(260, totalHeight)));
+
+      const centerX = Math.floor(width / 2);
+
+      // lines (vertical)
       for (let i = 0; i < N-1; i++) {
-        const x1 = margin + i*span, x2 = margin + (i+1)*span;
+        const y1 = marginY + i*rowGap;
+        const y2 = marginY + (i+1)*rowGap;
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', x1); line.setAttribute('y1', y);
-        line.setAttribute('x2', x2); line.setAttribute('y2', y);
+        line.setAttribute('x1', centerX); line.setAttribute('y1', y1);
+        line.setAttribute('x2', centerX); line.setAttribute('y2', y2);
         line.setAttribute('stroke', '#2c3358'); line.setAttribute('stroke-width', '3');
         svg.appendChild(line);
       }
-      // nodes
+      // nodes stacked vertically
       for (let i = 0; i < N; i++) {
         const p = CURRENT_CHAPTER.puzzles[i];
-        const unlocked = st.unlocked.includes(p.id);
-        const completed = st.completed.includes(p.id);
-        const x = margin + i*span;
+        const puzzleProgress = progressData.find(pp => pp.puzzle_id === p.id);
+        const unlocked = i === 0 || (puzzleProgress && puzzleProgress.completed);
+        const completed = puzzleProgress && puzzleProgress.completed;
+        const cx = centerX;
+        const cy = marginY + i*rowGap;
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g.setAttribute('class', 'map-node' + (unlocked ? '' : ' locked'));
         g.style.opacity = unlocked ? '1' : '0.5';
-        // halo if completed
         if (completed) {
           const halo = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          halo.setAttribute('cx', x); halo.setAttribute('cy', y); halo.setAttribute('r', radius+8);
+          halo.setAttribute('cx', cx); halo.setAttribute('cy', cy); halo.setAttribute('r', radius+8);
           halo.setAttribute('fill', 'none'); halo.setAttribute('stroke', '#6bffa8'); halo.setAttribute('stroke-width', '3'); halo.setAttribute('stroke-dasharray', '4,4');
           svg.appendChild(halo);
         }
         const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', radius);
+        c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', radius);
         c.setAttribute('fill', unlocked ? '#1e2237' : '#15182b');
         c.setAttribute('stroke', unlocked ? '#7c9cff' : '#2c3358');
         c.setAttribute('stroke-width', '3');
         g.appendChild(c);
         const t1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        t1.setAttribute('x', x); t1.setAttribute('y', y-32); t1.setAttribute('text-anchor', 'middle'); t1.setAttribute('fill', '#e7ecff'); t1.setAttribute('font-size', '12'); t1.textContent = p.name;
+        t1.setAttribute('x', cx + radius + 10); t1.setAttribute('y', cy - 6);
+        t1.setAttribute('fill', '#e7ecff'); t1.setAttribute('font-size', '13'); t1.textContent = p.name;
+        t1.setAttribute('text-anchor', 'start');
         svg.appendChild(t1);
         const t2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        t2.setAttribute('x', x); t2.setAttribute('y', y+4); t2.setAttribute('text-anchor', 'middle'); t2.setAttribute('fill', '#e7ecff'); t2.setAttribute('font-size', '12'); t2.textContent = p.limit + 'T';
-        g.appendChild(t2);
+        t2.setAttribute('x', cx + radius + 10); t2.setAttribute('y', cy + 14);
+        t2.setAttribute('fill', '#a8b0d6'); t2.setAttribute('font-size', '12'); t2.textContent = p.limit + ' turns';
+        t2.setAttribute('text-anchor', 'start');
+        svg.appendChild(t2);
         if (unlocked) g.addEventListener('click', ()=> openPuzzleIntro(p));
         svg.appendChild(g);
       }
@@ -767,6 +857,41 @@
     let viewOffset = { x: canvas.width/2, y: canvas.height/2 };
     let selectedId = null;
     let highlightedMoves = [];
+    let PENDING_ABILITY = null; // { pieceId, type: 'ranged'|'ability', attackType?, name? }
+
+    // --- Responsive sizing ---
+    function computeBoardBoundsForRadius(rad) {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (let q = -BOARD_RADIUS; q <= BOARD_RADIUS; q++) {
+        for (let r = -BOARD_RADIUS; r <= BOARD_RADIUS; r++) {
+          if ((Math.abs(q + r) > BOARD_RADIUS) || (Math.abs(q) > BOARD_RADIUS) || (Math.abs(r) > BOARD_RADIUS)) continue;
+          const x = rad * Math.sqrt(3) * (q + r/2);
+          const y = rad * 1.5 * r;
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+      const pad = rad; // include full hex extents
+      return { width: (maxX - minX) + pad*2, height: (maxY - minY) + pad*2 };
+    }
+
+    function fitBoardToContainer() {
+      const wrap = document.querySelector('.board-wrap');
+      if (!wrap) return;
+      const availW = Math.max(100, wrap.clientWidth);
+      const availH = Math.max(100, wrap.clientHeight);
+      const nat = computeBoardBoundsForRadius(BASE_TILE_RADIUS);
+      const scale = Math.min(availW / nat.width, availH / nat.height);
+      TILE_RADIUS = Math.max(10, BASE_TILE_RADIUS * scale);
+
+      // Resize canvas to container
+      canvas.width = availW;
+      canvas.height = availH;
+      viewOffset = { x: canvas.width / 2, y: canvas.height / 2 };
+      if (GAME) drawBoard(GAME); else drawBoard(new GameState(STORY[0].puzzles[0]));
+    }
+
+    window.addEventListener('resize', fitBoardToContainer);
 
     function drawBoard(gs) {
       ctx.clearRect(0,0,canvas.width, canvas.height);
@@ -781,7 +906,11 @@
       // Highlights
       for (const mv of highlightedMoves) {
         const { x, y } = axialToPixel(mv.to.q, mv.to.r);
-        drawHexStroke(x + viewOffset.x, y + viewOffset.y, TILE_RADIUS - 4, mv.type==='move' ? '#6bffa8' : '#ffd56b', 3, [6,4]);
+        let color = '#ffd56b';
+        if (mv.type === 'move') color = '#6bffa8';
+        if (mv.type === 'ranged' && mv.attackType==='spell') color = '#9fb6ff';
+        if (mv.type === 'ability' && mv.name==='immobilize') color = '#ffd56b';
+        drawHexStroke(x + viewOffset.x, y + viewOffset.y, TILE_RADIUS - 4, color, 3, [6,4]);
       }
       // Pieces
       const sorted = Array.from(gs.pieces.values()).filter(p=>p.alive).sort((a,b)=>a.side===SIDES.Enemy?1:-1);
@@ -863,6 +992,7 @@
     canvas.addEventListener('click', onCanvasClick);
     function onCanvasClick(ev) {
       if (!GAME) return;
+      if (PREVIEW_MODE) return; // no interactions during preview
       const rect = canvas.getBoundingClientRect();
       const x = ev.clientX - rect.left - viewOffset.x;
       const y = ev.clientY - rect.top - viewOffset.y;
@@ -876,16 +1006,28 @@
           selectPiece(pc.id);
           return;
         }
+        // If targeting via ability button, restrict to that move type
+        if (PENDING_ABILITY && PENDING_ABILITY.pieceId === selected.id) {
+          let mv = highlightedMoves.find(m => m.type === PENDING_ABILITY.type &&
+            (!PENDING_ABILITY.attackType || m.attackType === PENDING_ABILITY.attackType) &&
+            (!PENDING_ABILITY.name || m.name === PENDING_ABILITY.name) && m.to.q === q && m.to.r === r);
+          if (!mv && pc && pc.side !== selected.side) {
+            mv = highlightedMoves.find(m => m.type === PENDING_ABILITY.type &&
+              (!PENDING_ABILITY.attackType || m.attackType === PENDING_ABILITY.attackType) &&
+              (!PENDING_ABILITY.name || m.name === PENDING_ABILITY.name) && m.target === pc.id);
+          }
+          if (mv) { enqueueAction(selected, mv); PENDING_ABILITY = null; return; }
+        }
         // Try to enact a highlighted move to this tile
         const mv = highlightedMoves.find(m => m.to.q === q && m.to.r === r);
         if (mv) {
-          doPlayerAction(selected, mv);
+          enqueueAction(selected, mv);
           return;
         }
         // If clicked an enemy and there is a ranged/ability move specifically targeting it
         if (pc && pc.side !== selected.side) {
           const mv2 = highlightedMoves.find(m => (m.type==='ranged' || m.type==='ability') && m.target === pc.id);
-          if (mv2) { doPlayerAction(selected, mv2); return; }
+          if (mv2) { enqueueAction(selected, mv2); return; }
         }
         // otherwise clear selection
         selectPiece(null);
@@ -919,15 +1061,39 @@
       const moves = legalMoves(GAME, piece);
       highlightedMoves = moves;
       info.innerText = piece.type.name + ' at ' + axialKey(piece.q, piece.r) + (piece.owner ? ` • ${piece.owner}` : '');
-      // ability buttons (for clarity only)
-      for (const mv of moves) {
-        if (mv.type === 'ranged' || mv.type === 'ability') {
-          const btn = document.createElement('button');
-          btn.className = 'secondary';
-          btn.innerText = mv.type === 'ranged' ? (mv.attackType==='spell' ? 'Cast' : 'Shoot') : 'Immobilize';
-          btn.onclick = () => { selectPiece(pieceId); /* refresh */ };
-          abilities.appendChild(btn);
-        }
+      // Ability buttons (interactive targeting)
+      const hasShoot = moves.some(m => m.type==='ranged' && m.attackType==='physical');
+      const hasCast = moves.some(m => m.type==='ranged' && m.attackType==='spell');
+      const hasImm = moves.some(m => m.type==='ability' && m.name==='immobilize');
+      if (hasShoot) {
+        const btn = document.createElement('button');
+        btn.className = 'secondary'; btn.innerText = 'Shoot';
+        btn.onclick = () => {
+          PENDING_ABILITY = { pieceId, type: 'ranged', attackType: 'physical' };
+          highlightedMoves = moves.filter(m=>m.type==='ranged' && m.attackType==='physical');
+          drawBoard(GAME);
+        };
+        abilities.appendChild(btn);
+      }
+      if (hasCast) {
+        const btn = document.createElement('button');
+        btn.className = 'secondary'; btn.innerText = 'Cast';
+        btn.onclick = () => {
+          PENDING_ABILITY = { pieceId, type: 'ranged', attackType: 'spell' };
+          highlightedMoves = moves.filter(m=>m.type==='ranged' && m.attackType==='spell');
+          drawBoard(GAME);
+        };
+        abilities.appendChild(btn);
+      }
+      if (hasImm) {
+        const btn = document.createElement('button');
+        btn.className = 'secondary'; btn.innerText = 'Immobilize';
+        btn.onclick = () => {
+          PENDING_ABILITY = { pieceId, type: 'ability', name: 'immobilize' };
+          highlightedMoves = moves.filter(m=>m.type==='ability' && m.name==='immobilize');
+          drawBoard(GAME);
+        };
+        abilities.appendChild(btn);
       }
       drawBoard(GAME);
     }
@@ -945,6 +1111,8 @@
       // controller swap availability
       const canSwap = !!(GAME.teamMode && GAME.side === SIDES.Player);
       document.getElementById('btn-swap-controller').disabled = !canSwap;
+      // keep queue controls in sync
+      if (typeof validateAndRenderQueue === 'function') validateAndRenderQueue();
     }
     function doPlayerAction(piece, move) {
       if (GAME.side !== SIDES.Player) return;
@@ -984,8 +1152,175 @@
           }
           selectPiece(null);
           drawBoard(GAME);
+          if (typeof validateAndRenderQueue === 'function') validateAndRenderQueue();
         }, 350);
       }
+    }
+
+    // --- Action Queue ---
+    let ACTION_QUEUE = [];
+    let PREVIEW_MODE = false;
+    let PREVIEW_STATE = null;
+    let QUEUE_PREVIEWS = [];
+
+    function actionToText(piece, move) {
+      const target = move.target ? ` -> ${move.target}` : '';
+      const to = move.to ? ` to ${axialKey(move.to.q, move.to.r)}` : '';
+      const cap = move.capture ? ` x ${move.capture}` : '';
+      const owner = piece.owner ? ` • ${piece.owner}` : '';
+      return `${piece.type.name}${owner}: ${move.type}${to}${cap}${target}`;
+    }
+
+    function enqueueAction(piece, move) {
+      if (GAME.side !== SIDES.Player) return;
+      // Enforce one action per unit per turn
+      if (ACTION_QUEUE.some(it => it.pieceId === piece.id)) {
+        log('That unit is already in the queue this turn.', 'warning');
+        return;
+      }
+      // Team-mode controller restriction at input time
+      if (GAME.teamMode && piece.owner && piece.owner !== GAME.currentController) {
+        log('Not your piece (team controller restriction).', 'warning');
+        return;
+      }
+      // Create a description by simulating on a clone
+      const sim = GAME.clone();
+      const simPiece = sim.pieces.get(piece.id);
+      const result = applyMove(sim, simPiece, move);
+      const desc = result.ok ? result.desc : (result.error || 'Action');
+      ACTION_QUEUE.push({ id: `${piece.id}:${Date.now()}`, pieceId: piece.id, move: JSON.parse(JSON.stringify(move)), text: actionToText(piece, move), desc });
+      log(`Queued: ${actionToText(piece, move)}`);
+      // Clear selection after enqueue for convenience
+      selectPiece(null);
+      validateAndRenderQueue();
+    }
+
+    function simulateQueue() {
+      const errors = [];
+      const previews = [];
+      const sim = GAME.clone();
+      // Ensure simulation starts from same moved set as live
+      sim.movedThisTurn = new Set(GAME.movedThisTurn);
+      for (let i = 0; i < ACTION_QUEUE.length; i++) {
+        const item = ACTION_QUEUE[i];
+        const before = sim.clone();
+        const piece = sim.pieces.get(item.pieceId);
+        if (!piece || !piece.alive) {
+          errors.push(`Step ${i+1}: Piece is not available`);
+          previews.push({ before, after: before });
+          continue;
+        }
+        if (sim.movedThisTurn.has(piece.id)) {
+          errors.push(`Step ${i+1}: ${piece.type.name} has already acted`);
+          previews.push({ before, after: before });
+          continue;
+        }
+        if (sim.teamMode && piece.owner && piece.owner !== sim.currentController) {
+          errors.push(`Step ${i+1}: Controller mismatch for ${piece.type.name}`);
+          previews.push({ before, after: before });
+          continue;
+        }
+        const result = applyMove(sim, piece, item.move);
+        if (!result.ok) {
+          errors.push(`Step ${i+1}: ${result.error || 'Illegal action'}`);
+          previews.push({ before, after: before });
+          continue;
+        }
+        // Mirror doPlayerAction bookkeeping
+        sim.movedThisTurn.add(piece.id);
+        const after = sim.clone();
+        previews.push({ before, after });
+      }
+      return { errors, previews };
+    }
+
+    function renderActionQueue() {
+      const list = el('action-queue');
+      list.innerHTML = '';
+      ACTION_QUEUE.forEach((item, idx) => {
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.style.alignItems = 'center';
+        row.style.gap = '6px';
+        const label = document.createElement('div');
+        label.style.flex = '1';
+        label.innerText = `${idx+1}. ${item.text}`;
+        const btnUp = document.createElement('button'); btnUp.className = 'ghost'; btnUp.innerText = '↑'; btnUp.title = 'Move up';
+        btnUp.onclick = () => { if (idx>0) { const t = ACTION_QUEUE[idx-1]; ACTION_QUEUE[idx-1] = ACTION_QUEUE[idx]; ACTION_QUEUE[idx] = t; validateAndRenderQueue(); }};
+        const btnDown = document.createElement('button'); btnDown.className = 'ghost'; btnDown.innerText = '↓'; btnDown.title = 'Move down';
+        btnDown.onclick = () => { if (idx<ACTION_QUEUE.length-1) { const t = ACTION_QUEUE[idx+1]; ACTION_QUEUE[idx+1] = ACTION_QUEUE[idx]; ACTION_QUEUE[idx] = t; validateAndRenderQueue(); }};
+        const btnPre = document.createElement('button'); btnPre.className = 'secondary'; btnPre.innerText = 'Preview ⟵'; btnPre.title = 'Preview before';
+        btnPre.onclick = () => showPreviewAt(idx, 'before');
+        const btnPost = document.createElement('button'); btnPost.innerText = 'Preview ⟶'; btnPost.title = 'Preview after';
+        btnPost.onclick = () => showPreviewAt(idx, 'after');
+        const btnDel = document.createElement('button'); btnDel.className = 'ghost'; btnDel.innerText = '✖'; btnDel.title = 'Remove';
+        btnDel.onclick = () => { ACTION_QUEUE.splice(idx,1); validateAndRenderQueue(); };
+        row.appendChild(label);
+        row.appendChild(btnUp);
+        row.appendChild(btnDown);
+        row.appendChild(btnPre);
+        row.appendChild(btnPost);
+        row.appendChild(btnDel);
+        list.appendChild(row);
+      });
+    }
+
+    function validateAndRenderQueue() {
+      const warn = el('queue-warning');
+      const { errors, previews } = simulateQueue();
+      QUEUE_PREVIEWS = previews;
+      if (errors.length) {
+        warn.style.display = '';
+        warn.className = 'notice';
+        warn.innerHTML = `<span class="danger">Conflicts:</span><br>${errors.map(e=>`• ${e}`).join('<br>')}`;
+      } else {
+        warn.style.display = ACTION_QUEUE.length ? '' : 'none';
+        warn.className = 'notice';
+        warn.innerHTML = ACTION_QUEUE.length ? '<span class="success">No conflicts detected.</span>' : '';
+      }
+      // Toggle Complete button if conflicts
+      const btn = document.getElementById('btn-complete-turn');
+      btn.disabled = errors.length > 0 || ACTION_QUEUE.length === 0 || GAME.side !== SIDES.Player;
+      renderActionQueue();
+    }
+
+    function showPreviewAt(index, when) {
+      if (!QUEUE_PREVIEWS[index]) return;
+      PREVIEW_MODE = true;
+      PREVIEW_STATE = (when === 'before') ? QUEUE_PREVIEWS[index].before : QUEUE_PREVIEWS[index].after;
+      el('btn-exit-preview').style.display = '';
+      drawBoard(PREVIEW_STATE);
+    }
+
+    function exitPreview() {
+      PREVIEW_MODE = false;
+      PREVIEW_STATE = null;
+      el('btn-exit-preview').style.display = 'none';
+      drawBoard(GAME);
+    }
+
+    async function completeTurnExecuteQueue() {
+      if (GAME.side !== SIDES.Player) return;
+      const { errors } = simulateQueue();
+      if (errors.length) { log('Cannot complete turn: resolve conflicts first.', 'danger'); return; }
+      // Apply sequentially to live game
+      for (let i = 0; i < ACTION_QUEUE.length; i++) {
+        const item = ACTION_QUEUE[i];
+        const piece = GAME.pieces.get(item.pieceId);
+        if (!piece || !piece.alive) { log(`Step ${i+1} failed: piece unavailable`, 'danger'); continue; }
+        const fromKey = axialKey(piece.q, piece.r);
+        const result = applyMove(GAME, piece, item.move);
+        if (!result.ok) { log(`Step ${i+1} failed: ${result.error}`, 'danger'); continue; }
+        GAME.solutionTrace.push({ side: SIDES.Player, action: item.move.type, from: fromKey, to: axialKey(item.move.to.q, item.move.to.r) });
+        log(result.desc);
+        GAME.movedThisTurn.add(piece.id);
+      }
+      // Clear queue
+      ACTION_QUEUE = [];
+      validateAndRenderQueue();
+      // End turn after executing queued actions
+      postMoveCheckAndAdvance(true, true);
+      drawBoard(GAME);
     }
 
     function playerPiecesWithActions(gs) {
@@ -1025,24 +1360,78 @@
       }
       return best;
     }
-    function onVictory() {
+    async function onVictory() {
       log('You captured the enemy Commander!', 'success');
-      // mark completed
-      const st = CURRENT_USER.profile.chapters[CURRENT_CHAPTER.id];
-      if (!st.completed.includes(CURRENT_PUZZLE.id)) st.completed.push(CURRENT_PUZZLE.id);
-      // unlock next
-      const idx = CURRENT_CHAPTER.puzzles.findIndex(p=>p.id===CURRENT_PUZZLE.id);
-      const next = CURRENT_CHAPTER.puzzles[idx+1];
-      if (next && !st.unlocked.includes(next.id)) st.unlocked.push(next.id);
-      saveProfile();
+      
+      // Save progress to backend
+      try {
+        const response = await fetch('/api/puzzle/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: GAME.sessionId,
+            puzzle_id: CURRENT_PUZZLE.id,
+            moves_used: CURRENT_PUZZLE.limit - GAME.turnsLeft,
+            hints_used: 0, // TODO: track hints used
+            team_mode: GAME.teamMode
+          })
+        });
+        
+        if (response.ok) {
+          // Check if we should unlock next chapter
+          const currentChapter = CURRENT_USER.current_chapter || 1;
+          const chapterProgress = await fetch('/api/progress');
+          if (chapterProgress.ok) {
+            const progressData = await chapterProgress.json();
+            const chapterPuzzles = progressData[currentChapter] || [];
+            const allCompleted = chapterPuzzles.every(p => p.completed);
+            
+            if (allCompleted && currentChapter < 2) { // Assuming 2 chapters for now
+              // Unlock next chapter
+              await fetch(`/api/chapter/${currentChapter + 1}/unlock`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+              });
+              CURRENT_USER.current_chapter = currentChapter + 1;
+            }
+          }
+        }
+      } catch (error) {
+        console.log('Error saving progress:', error);
+      }
+      
       setTimeout(()=>{ alert('Victory! Puzzle complete.'); exitToMenu(); }, 50);
     }
     function onDefeat(msg) { log('Defeat: '+msg, 'danger'); setTimeout(()=>{ alert('Defeat: '+msg); }, 50); }
 
     // --- Puzzle Flow ---
-    function startPuzzle(p) {
+    async function startPuzzle(p) {
       CURRENT_PUZZLE = p;
-      GAME = new GameState(p);
+      
+      // Create game session with backend
+      try {
+        const response = await fetch('/api/puzzle/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            puzzle_id: p.id,
+            chapter: CURRENT_USER.current_chapter || 1
+          })
+        });
+        
+        if (response.ok) {
+          const sessionData = await response.json();
+          GAME = new GameState(p);
+          GAME.sessionId = sessionData.session_id;
+        } else {
+          console.log('Error creating session:', response.statusText);
+          GAME = new GameState(p);
+        }
+      } catch (error) {
+        console.log('Error creating session:', error);
+        GAME = new GameState(p);
+      }
+      
       ensureDoomPiece(GAME);
       selectedId = null; highlightedMoves = [];
       el('game-title').innerText = p.name;
@@ -1054,8 +1443,9 @@
       el('log').innerHTML = '';
       selectPiece(null);
       refreshHud();
-      drawBoard(GAME);
       showScreen('game');
+      fitBoardToContainer();
+      drawBoard(GAME);
     }
     function openPuzzleIntro(p) {
       const m = document.getElementById('story-modal');
@@ -1069,7 +1459,7 @@
       const begin = document.getElementById('story-modal-begin');
       const cancel = document.getElementById('story-modal-cancel');
       const off = ()=>{ m.classList.remove('active'); begin.onclick=null; cancel.onclick=null; };
-      begin.onclick = ()=>{ off(); startPuzzle(p); };
+      begin.onclick = async ()=>{ off(); await startPuzzle(p); };
       cancel.onclick = ()=>{ off(); };
     }
     function exitToMenu() { showScreen('menu'); renderMenu(); }
@@ -1090,6 +1480,9 @@
     el('btn-endturn').addEventListener('click', ()=>{
       if (!GAME || GAME.side !== SIDES.Player) return;
       log('You end your turn.');
+      // Clear any queued actions and preview state when manually ending turn
+      ACTION_QUEUE = [];
+      if (PREVIEW_MODE) exitPreview(); else validateAndRenderQueue();
       postMoveCheckAndAdvance(false, true);
     });
     el('btn-undo').addEventListener('click', ()=>{
@@ -1136,6 +1529,27 @@
       refreshHud();
       drawBoard(GAME);
     });
+    // Queue controls
+    el('btn-complete-turn').addEventListener('click', ()=>{ if (PREVIEW_MODE) exitPreview(); completeTurnExecuteQueue(); });
+    el('btn-clear-queue').addEventListener('click', ()=>{ ACTION_QUEUE = []; validateAndRenderQueue(); });
+    el('btn-exit-preview').addEventListener('click', exitPreview);
+
+    // Collapsible sections (Objective and Legend hidden by default)
+    function setupCollapsibles() {
+      const headers = document.querySelectorAll('#game-screen .collapsible');
+      headers.forEach(h => {
+        const targetId = h.getAttribute('data-target');
+        const target = document.getElementById(targetId);
+        if (!target) return;
+        // default collapsed; clicking toggles
+        h.classList.remove('expanded');
+        target.style.display = 'none';
+        h.addEventListener('click', () => {
+          const expanded = h.classList.toggle('expanded');
+          target.style.display = expanded ? '' : 'none';
+        });
+      });
+    }
 
     function compareSolution(trace, expected) {
       for (let i = 0; i < Math.min(trace.length, expected.length); i++) {
@@ -1146,27 +1560,36 @@
     }
 
     // --- Login wiring ---
-    el('btn-login').addEventListener('click', ()=>{
+    el('btn-login').addEventListener('click', async ()=>{
       const u = el('login-username').value.trim();
       const p = el('login-password').value;
-      const res = login(u, p);
+      const res = await login(u, p);
       if (!res.ok) { alert(res.error); return; }
       showScreen('menu'); renderMenu();
     });
-    el('btn-register').addEventListener('click', ()=>{
+    el('btn-register').addEventListener('click', async ()=>{
       const u = el('login-username').value.trim();
       const p = el('login-password').value;
-      const res = register(u, p);
+      const res = await register(u, p);
       if (!res.ok) { alert(res.error); return; }
       alert('Registered! You can now login.');
     });
-    el('btn-logout').addEventListener('click', ()=>{ Storage.clearSession(); location.reload(); });
+    el('btn-logout').addEventListener('click', async ()=>{ 
+      try {
+        await fetch('/api/logout', { method: 'GET' });
+      } catch (error) {
+        console.log('Logout error:', error);
+      }
+      localStorage.removeItem('hexp_session');
+      location.reload(); 
+    });
 
     // --- Boot ---
-    (function boot(){
-      if (loadSession()) { showScreen('menu'); renderMenu(); }
+    (async function boot(){
+      if (loadSession()) { showScreen('menu'); await renderMenu(); }
       else { showScreen('login'); }
-      drawBoard(new GameState(STORY[0].puzzles[0]));
+      fitBoardToContainer();
+      setupCollapsibles();
     })();
 
     // Doom piece helpers
