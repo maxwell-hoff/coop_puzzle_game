@@ -81,6 +81,20 @@
     .modal .footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; }
     .map-node { cursor: pointer; }
     .map-node.locked { cursor: not-allowed; }
+
+    /* --- Responsive (mobile) --- */
+    @media (max-width: 900px) {
+      .topbar { flex-wrap: wrap; gap: 8px; }
+      .content { grid-template-columns: 1fr; grid-auto-rows: auto; padding: 8px; gap: 8px; }
+      .legend { grid-template-columns: 1fr; }
+      .puzzle-list { grid-template-columns: 1fr; }
+      #menu-screen .content { grid-template-columns: 1fr !important; }
+      #puzzle-map { height: 260px; }
+      #game-screen .content { grid-template-areas: 'board' 'left' 'right'; }
+      #game-screen .content > .board-wrap { grid-area: board; width: 100%; min-height: 60vh; }
+      #game-screen .content > .panel.col:first-of-type { grid-area: left; }
+      #game-screen .content > .panel.col:last-of-type { grid-area: right; }
+    }
   </style>
 </head>
 <body>
@@ -227,7 +241,8 @@
       silenced: 'silenced',
     };
 
-    const TILE_RADIUS = 48; // pixel radius of hex
+    let BASE_TILE_RADIUS = 48;
+    let TILE_RADIUS = BASE_TILE_RADIUS; // pixel radius of hex (will scale to fit)
     const BOARD_RADIUS = 4; // hex radius (distance from center)
     const HEX_W = Math.sqrt(3) * TILE_RADIUS;
     const HEX_H = 2 * TILE_RADIUS * 0.75; // vertical spacing
@@ -824,6 +839,40 @@
     let selectedId = null;
     let highlightedMoves = [];
 
+    // --- Responsive sizing ---
+    function computeBoardBoundsForRadius(rad) {
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (let q = -BOARD_RADIUS; q <= BOARD_RADIUS; q++) {
+        for (let r = -BOARD_RADIUS; r <= BOARD_RADIUS; r++) {
+          if ((Math.abs(q + r) > BOARD_RADIUS) || (Math.abs(q) > BOARD_RADIUS) || (Math.abs(r) > BOARD_RADIUS)) continue;
+          const x = rad * Math.sqrt(3) * (q + r/2);
+          const y = rad * 1.5 * r;
+          if (x < minX) minX = x; if (x > maxX) maxX = x;
+          if (y < minY) minY = y; if (y > maxY) maxY = y;
+        }
+      }
+      const pad = rad; // include full hex extents
+      return { width: (maxX - minX) + pad*2, height: (maxY - minY) + pad*2 };
+    }
+
+    function fitBoardToContainer() {
+      const wrap = document.querySelector('.board-wrap');
+      if (!wrap) return;
+      const availW = Math.max(100, wrap.clientWidth);
+      const availH = Math.max(100, wrap.clientHeight);
+      const nat = computeBoardBoundsForRadius(BASE_TILE_RADIUS);
+      const scale = Math.min(availW / nat.width, availH / nat.height);
+      TILE_RADIUS = Math.max(10, BASE_TILE_RADIUS * scale);
+
+      // Resize canvas to container
+      canvas.width = availW;
+      canvas.height = availH;
+      viewOffset = { x: canvas.width / 2, y: canvas.height / 2 };
+      if (GAME) drawBoard(GAME); else drawBoard(new GameState(STORY[0].puzzles[0]));
+    }
+
+    window.addEventListener('resize', fitBoardToContainer);
+
     function drawBoard(gs) {
       ctx.clearRect(0,0,canvas.width, canvas.height);
       // Tiles
@@ -1164,8 +1213,9 @@
       el('log').innerHTML = '';
       selectPiece(null);
       refreshHud();
-      drawBoard(GAME);
       showScreen('game');
+      fitBoardToContainer();
+      drawBoard(GAME);
     }
     function openPuzzleIntro(p) {
       const m = document.getElementById('story-modal');
@@ -1284,7 +1334,7 @@
     (async function boot(){
       if (loadSession()) { showScreen('menu'); await renderMenu(); }
       else { showScreen('login'); }
-      drawBoard(new GameState(STORY[0].puzzles[0]));
+      fitBoardToContainer();
     })();
 
     // Doom piece helpers
