@@ -184,6 +184,14 @@
         <div id="abilities" class="col"></div>
         <h3>Status</h3>
         <div id="status" class="col"></div>
+         <h3>Action Queue</h3>
+         <div id="queue-warning" class="notice" style="display:none;"></div>
+         <div id="action-queue" class="col" style="max-height: 220px; overflow:auto;"></div>
+         <div class="actions">
+           <button id="btn-complete-turn">Complete Turn</button>
+           <button id="btn-clear-queue" class="ghost">Clear Queue</button>
+           <button id="btn-exit-preview" class="secondary" style="display:none;">Exit Preview</button>
+         </div>
       </div>
     </div>
   </div>
@@ -971,6 +979,7 @@
     canvas.addEventListener('click', onCanvasClick);
     function onCanvasClick(ev) {
       if (!GAME) return;
+      if (PREVIEW_MODE) return; // no interactions during preview
       const rect = canvas.getBoundingClientRect();
       const x = ev.clientX - rect.left - viewOffset.x;
       const y = ev.clientY - rect.top - viewOffset.y;
@@ -987,13 +996,13 @@
         // Try to enact a highlighted move to this tile
         const mv = highlightedMoves.find(m => m.to.q === q && m.to.r === r);
         if (mv) {
-          doPlayerAction(selected, mv);
+          enqueueAction(selected, mv);
           return;
         }
         // If clicked an enemy and there is a ranged/ability move specifically targeting it
         if (pc && pc.side !== selected.side) {
           const mv2 = highlightedMoves.find(m => (m.type==='ranged' || m.type==='ability') && m.target === pc.id);
-          if (mv2) { doPlayerAction(selected, mv2); return; }
+          if (mv2) { enqueueAction(selected, mv2); return; }
         }
         // otherwise clear selection
         selectPiece(null);
@@ -1053,6 +1062,8 @@
       // controller swap availability
       const canSwap = !!(GAME.teamMode && GAME.side === SIDES.Player);
       document.getElementById('btn-swap-controller').disabled = !canSwap;
+      // keep queue controls in sync
+      if (typeof validateAndRenderQueue === 'function') validateAndRenderQueue();
     }
     function doPlayerAction(piece, move) {
       if (GAME.side !== SIDES.Player) return;
@@ -1092,8 +1103,175 @@
           }
           selectPiece(null);
           drawBoard(GAME);
+          if (typeof validateAndRenderQueue === 'function') validateAndRenderQueue();
         }, 350);
       }
+    }
+
+    // --- Action Queue ---
+    let ACTION_QUEUE = [];
+    let PREVIEW_MODE = false;
+    let PREVIEW_STATE = null;
+    let QUEUE_PREVIEWS = [];
+
+    function actionToText(piece, move) {
+      const target = move.target ? ` -> ${move.target}` : '';
+      const to = move.to ? ` to ${axialKey(move.to.q, move.to.r)}` : '';
+      const cap = move.capture ? ` x ${move.capture}` : '';
+      const owner = piece.owner ? ` • ${piece.owner}` : '';
+      return `${piece.type.name}${owner}: ${move.type}${to}${cap}${target}`;
+    }
+
+    function enqueueAction(piece, move) {
+      if (GAME.side !== SIDES.Player) return;
+      // Enforce one action per unit per turn
+      if (ACTION_QUEUE.some(it => it.pieceId === piece.id)) {
+        log('That unit is already in the queue this turn.', 'warning');
+        return;
+      }
+      // Team-mode controller restriction at input time
+      if (GAME.teamMode && piece.owner && piece.owner !== GAME.currentController) {
+        log('Not your piece (team controller restriction).', 'warning');
+        return;
+      }
+      // Create a description by simulating on a clone
+      const sim = GAME.clone();
+      const simPiece = sim.pieces.get(piece.id);
+      const result = applyMove(sim, simPiece, move);
+      const desc = result.ok ? result.desc : (result.error || 'Action');
+      ACTION_QUEUE.push({ id: `${piece.id}:${Date.now()}`, pieceId: piece.id, move: JSON.parse(JSON.stringify(move)), text: actionToText(piece, move), desc });
+      log(`Queued: ${actionToText(piece, move)}`);
+      // Clear selection after enqueue for convenience
+      selectPiece(null);
+      validateAndRenderQueue();
+    }
+
+    function simulateQueue() {
+      const errors = [];
+      const previews = [];
+      const sim = GAME.clone();
+      // Ensure simulation starts from same moved set as live
+      sim.movedThisTurn = new Set(GAME.movedThisTurn);
+      for (let i = 0; i < ACTION_QUEUE.length; i++) {
+        const item = ACTION_QUEUE[i];
+        const before = sim.clone();
+        const piece = sim.pieces.get(item.pieceId);
+        if (!piece || !piece.alive) {
+          errors.push(`Step ${i+1}: Piece is not available`);
+          previews.push({ before, after: before });
+          continue;
+        }
+        if (sim.movedThisTurn.has(piece.id)) {
+          errors.push(`Step ${i+1}: ${piece.type.name} has already acted`);
+          previews.push({ before, after: before });
+          continue;
+        }
+        if (sim.teamMode && piece.owner && piece.owner !== sim.currentController) {
+          errors.push(`Step ${i+1}: Controller mismatch for ${piece.type.name}`);
+          previews.push({ before, after: before });
+          continue;
+        }
+        const result = applyMove(sim, piece, item.move);
+        if (!result.ok) {
+          errors.push(`Step ${i+1}: ${result.error || 'Illegal action'}`);
+          previews.push({ before, after: before });
+          continue;
+        }
+        // Mirror doPlayerAction bookkeeping
+        sim.movedThisTurn.add(piece.id);
+        const after = sim.clone();
+        previews.push({ before, after });
+      }
+      return { errors, previews };
+    }
+
+    function renderActionQueue() {
+      const list = el('action-queue');
+      list.innerHTML = '';
+      ACTION_QUEUE.forEach((item, idx) => {
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.style.alignItems = 'center';
+        row.style.gap = '6px';
+        const label = document.createElement('div');
+        label.style.flex = '1';
+        label.innerText = `${idx+1}. ${item.text}`;
+        const btnUp = document.createElement('button'); btnUp.className = 'ghost'; btnUp.innerText = '↑'; btnUp.title = 'Move up';
+        btnUp.onclick = () => { if (idx>0) { const t = ACTION_QUEUE[idx-1]; ACTION_QUEUE[idx-1] = ACTION_QUEUE[idx]; ACTION_QUEUE[idx] = t; validateAndRenderQueue(); }};
+        const btnDown = document.createElement('button'); btnDown.className = 'ghost'; btnDown.innerText = '↓'; btnDown.title = 'Move down';
+        btnDown.onclick = () => { if (idx<ACTION_QUEUE.length-1) { const t = ACTION_QUEUE[idx+1]; ACTION_QUEUE[idx+1] = ACTION_QUEUE[idx]; ACTION_QUEUE[idx] = t; validateAndRenderQueue(); }};
+        const btnPre = document.createElement('button'); btnPre.className = 'secondary'; btnPre.innerText = 'Preview ⟵'; btnPre.title = 'Preview before';
+        btnPre.onclick = () => showPreviewAt(idx, 'before');
+        const btnPost = document.createElement('button'); btnPost.innerText = 'Preview ⟶'; btnPost.title = 'Preview after';
+        btnPost.onclick = () => showPreviewAt(idx, 'after');
+        const btnDel = document.createElement('button'); btnDel.className = 'ghost'; btnDel.innerText = '✖'; btnDel.title = 'Remove';
+        btnDel.onclick = () => { ACTION_QUEUE.splice(idx,1); validateAndRenderQueue(); };
+        row.appendChild(label);
+        row.appendChild(btnUp);
+        row.appendChild(btnDown);
+        row.appendChild(btnPre);
+        row.appendChild(btnPost);
+        row.appendChild(btnDel);
+        list.appendChild(row);
+      });
+    }
+
+    function validateAndRenderQueue() {
+      const warn = el('queue-warning');
+      const { errors, previews } = simulateQueue();
+      QUEUE_PREVIEWS = previews;
+      if (errors.length) {
+        warn.style.display = '';
+        warn.className = 'notice';
+        warn.innerHTML = `<span class="danger">Conflicts:</span><br>${errors.map(e=>`• ${e}`).join('<br>')}`;
+      } else {
+        warn.style.display = ACTION_QUEUE.length ? '' : 'none';
+        warn.className = 'notice';
+        warn.innerHTML = ACTION_QUEUE.length ? '<span class="success">No conflicts detected.</span>' : '';
+      }
+      // Toggle Complete button if conflicts
+      const btn = document.getElementById('btn-complete-turn');
+      btn.disabled = errors.length > 0 || ACTION_QUEUE.length === 0 || GAME.side !== SIDES.Player;
+      renderActionQueue();
+    }
+
+    function showPreviewAt(index, when) {
+      if (!QUEUE_PREVIEWS[index]) return;
+      PREVIEW_MODE = true;
+      PREVIEW_STATE = (when === 'before') ? QUEUE_PREVIEWS[index].before : QUEUE_PREVIEWS[index].after;
+      el('btn-exit-preview').style.display = '';
+      drawBoard(PREVIEW_STATE);
+    }
+
+    function exitPreview() {
+      PREVIEW_MODE = false;
+      PREVIEW_STATE = null;
+      el('btn-exit-preview').style.display = 'none';
+      drawBoard(GAME);
+    }
+
+    async function completeTurnExecuteQueue() {
+      if (GAME.side !== SIDES.Player) return;
+      const { errors } = simulateQueue();
+      if (errors.length) { log('Cannot complete turn: resolve conflicts first.', 'danger'); return; }
+      // Apply sequentially to live game
+      for (let i = 0; i < ACTION_QUEUE.length; i++) {
+        const item = ACTION_QUEUE[i];
+        const piece = GAME.pieces.get(item.pieceId);
+        if (!piece || !piece.alive) { log(`Step ${i+1} failed: piece unavailable`, 'danger'); continue; }
+        const fromKey = axialKey(piece.q, piece.r);
+        const result = applyMove(GAME, piece, item.move);
+        if (!result.ok) { log(`Step ${i+1} failed: ${result.error}`, 'danger'); continue; }
+        GAME.solutionTrace.push({ side: SIDES.Player, action: item.move.type, from: fromKey, to: axialKey(item.move.to.q, item.move.to.r) });
+        log(result.desc);
+        GAME.movedThisTurn.add(piece.id);
+      }
+      // Clear queue
+      ACTION_QUEUE = [];
+      validateAndRenderQueue();
+      // End turn after executing queued actions
+      postMoveCheckAndAdvance(true, true);
+      drawBoard(GAME);
     }
 
     function playerPiecesWithActions(gs) {
@@ -1253,6 +1431,9 @@
     el('btn-endturn').addEventListener('click', ()=>{
       if (!GAME || GAME.side !== SIDES.Player) return;
       log('You end your turn.');
+      // Clear any queued actions and preview state when manually ending turn
+      ACTION_QUEUE = [];
+      if (PREVIEW_MODE) exitPreview(); else validateAndRenderQueue();
       postMoveCheckAndAdvance(false, true);
     });
     el('btn-undo').addEventListener('click', ()=>{
@@ -1299,6 +1480,10 @@
       refreshHud();
       drawBoard(GAME);
     });
+    // Queue controls
+    el('btn-complete-turn').addEventListener('click', ()=>{ if (PREVIEW_MODE) exitPreview(); completeTurnExecuteQueue(); });
+    el('btn-clear-queue').addEventListener('click', ()=>{ ACTION_QUEUE = []; validateAndRenderQueue(); });
+    el('btn-exit-preview').addEventListener('click', exitPreview);
 
     function compareSolution(trace, expected) {
       for (let i = 0; i < Math.min(trace.length, expected.length); i++) {
