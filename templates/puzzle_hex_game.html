@@ -134,12 +134,7 @@
         <button class="secondary" id="btn-logout">Logout</button>
       </div>
     </div>
-    <div class="content" style="grid-template-columns: 440px 1fr;">
-      <div class="panel col">
-        <h2 id="story-title">The Whispering Vale</h2>
-        <div id="story-text" class="muted"></div>
-        <div class="hint" id="story-hint"></div>
-      </div>
+    <div class="content" style="grid-template-columns: 1fr;">
       <div class="panel col" style="overflow:hidden;">
         <div class="spaced"><h3>Puzzles</h3><div class="muted" id="progress-text"></div></div>
         <div id="puzzle-map-wrap" style="width:100%; height:100%; overflow:auto;">
@@ -464,9 +459,6 @@
       el('user-tag').innerText = CURRENT_USER.username;
       el('chapter-index').innerText = CURRENT_USER.current_chapter || '1';
       el('chapter-title').innerText = CURRENT_CHAPTER.title;
-      el('story-title').innerText = CURRENT_CHAPTER.title;
-      el('story-text').innerText = CURRENT_CHAPTER.text;
-      el('story-hint').innerText = CURRENT_CHAPTER.hint;
 
       // Fetch progress from backend
       try {
@@ -493,49 +485,60 @@
       const svg = document.getElementById('puzzle-map');
       if (!svg) return;
       svg.innerHTML = '';
-      // progressData parameter contains puzzle progress from backend
       const width = svg.clientWidth || 800;
       const N = CURRENT_CHAPTER.puzzles.length;
-      const margin = 40; const span = Math.max(120, (width - margin*2) / Math.max(1, N-1));
-      const y = 180; const radius = 20;
-      // lines
+      const marginX = 24;
+      const marginY = 24;
+      const radius = 18;
+      const rowGap = 90; // vertical spacing between nodes
+      const totalHeight = marginY*2 + Math.max(0, N-1)*rowGap + 1;
+      svg.setAttribute('height', String(Math.max(260, totalHeight)));
+
+      const centerX = Math.floor(width / 2);
+
+      // lines (vertical)
       for (let i = 0; i < N-1; i++) {
-        const x1 = margin + i*span, x2 = margin + (i+1)*span;
+        const y1 = marginY + i*rowGap;
+        const y2 = marginY + (i+1)*rowGap;
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', x1); line.setAttribute('y1', y);
-        line.setAttribute('x2', x2); line.setAttribute('y2', y);
+        line.setAttribute('x1', centerX); line.setAttribute('y1', y1);
+        line.setAttribute('x2', centerX); line.setAttribute('y2', y2);
         line.setAttribute('stroke', '#2c3358'); line.setAttribute('stroke-width', '3');
         svg.appendChild(line);
       }
-      // nodes
+      // nodes stacked vertically
       for (let i = 0; i < N; i++) {
         const p = CURRENT_CHAPTER.puzzles[i];
         const puzzleProgress = progressData.find(pp => pp.puzzle_id === p.id);
         const unlocked = i === 0 || (puzzleProgress && puzzleProgress.completed);
         const completed = puzzleProgress && puzzleProgress.completed;
-        const x = margin + i*span;
+        const cx = centerX;
+        const cy = marginY + i*rowGap;
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g.setAttribute('class', 'map-node' + (unlocked ? '' : ' locked'));
         g.style.opacity = unlocked ? '1' : '0.5';
-        // halo if completed
         if (completed) {
           const halo = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          halo.setAttribute('cx', x); halo.setAttribute('cy', y); halo.setAttribute('r', radius+8);
+          halo.setAttribute('cx', cx); halo.setAttribute('cy', cy); halo.setAttribute('r', radius+8);
           halo.setAttribute('fill', 'none'); halo.setAttribute('stroke', '#6bffa8'); halo.setAttribute('stroke-width', '3'); halo.setAttribute('stroke-dasharray', '4,4');
           svg.appendChild(halo);
         }
         const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', radius);
+        c.setAttribute('cx', cx); c.setAttribute('cy', cy); c.setAttribute('r', radius);
         c.setAttribute('fill', unlocked ? '#1e2237' : '#15182b');
         c.setAttribute('stroke', unlocked ? '#7c9cff' : '#2c3358');
         c.setAttribute('stroke-width', '3');
         g.appendChild(c);
         const t1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        t1.setAttribute('x', x); t1.setAttribute('y', y-32); t1.setAttribute('text-anchor', 'middle'); t1.setAttribute('fill', '#e7ecff'); t1.setAttribute('font-size', '12'); t1.textContent = p.name;
+        t1.setAttribute('x', cx + radius + 10); t1.setAttribute('y', cy - 6);
+        t1.setAttribute('fill', '#e7ecff'); t1.setAttribute('font-size', '13'); t1.textContent = p.name;
+        t1.setAttribute('text-anchor', 'start');
         svg.appendChild(t1);
         const t2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        t2.setAttribute('x', x); t2.setAttribute('y', y+4); t2.setAttribute('text-anchor', 'middle'); t2.setAttribute('fill', '#e7ecff'); t2.setAttribute('font-size', '12'); t2.textContent = p.limit + 'T';
-        g.appendChild(t2);
+        t2.setAttribute('x', cx + radius + 10); t2.setAttribute('y', cy + 14);
+        t2.setAttribute('fill', '#a8b0d6'); t2.setAttribute('font-size', '12'); t2.textContent = p.limit + ' turns';
+        t2.setAttribute('text-anchor', 'start');
+        svg.appendChild(t2);
         if (unlocked) g.addEventListener('click', ()=> openPuzzleIntro(p));
         svg.appendChild(g);
       }
