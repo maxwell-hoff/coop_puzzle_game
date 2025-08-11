@@ -68,6 +68,9 @@
     .pill { padding: 6px 10px; border-radius: 999px; border: 1px solid #2c3358; background: var(--panel-2); font-size: 12px; color: var(--muted); }
 
     .legend { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+    .collapsible { cursor: pointer; user-select: none; display: flex; align-items: center; justify-content: space-between; }
+    .collapsible::after { content: '▸'; color: var(--muted); font-size: 12px; margin-left: 8px; }
+    .collapsible.expanded::after { content: '▾'; }
     .legend-item { display: flex; gap: 8px; align-items: center; background: var(--panel-2); border: 1px solid #2c3358; padding: 8px; border-radius: 10px; }
     .legend-swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid #2c3358; }
 
@@ -160,18 +163,21 @@
       </div>
     </div>
     <div class="content">
-      <div class="panel col">
-        <h3>Objective</h3>
-        <div id="objective" class="muted">Capture the enemy Commander within the move limit.</div>
-        <div class="notice" id="puzzle-desc"></div>
-        <div class="hint" id="puzzle-hint"></div>
-        <h3>Legend</h3>
-        <div class="legend" id="legend"></div>
+      <div class="panel col" style="display:none;"></div>
+      <div class="board-wrap"><canvas id="board" width="900" height="740"></canvas></div>
+      <div class="panel col" style="overflow:auto;">
+        <h3 class="collapsible" data-target="objective-wrap">Objective</h3>
+        <div id="objective-wrap" style="display:none;" class="col">
+          <div id="objective" class="muted">Capture the enemy Commander within the move limit.</div>
+          <div class="notice" id="puzzle-desc"></div>
+          <div class="hint" id="puzzle-hint"></div>
+        </div>
+        <h3 class="collapsible" data-target="legend-wrap">Legend</h3>
+        <div id="legend-wrap" style="display:none;">
+          <div class="legend" id="legend"></div>
+        </div>
         <h3>Log</h3>
         <div id="log" class="col" style="max-height: 220px; overflow:auto; gap: 6px;"></div>
-      </div>
-      <div class="board-wrap"><canvas id="board" width="900" height="740"></canvas></div>
-      <div class="panel col">
         <h3>Selected</h3>
         <div id="selected" class="muted">None</div>
         <div class="actions">
@@ -184,14 +190,14 @@
         <div id="abilities" class="col"></div>
         <h3>Status</h3>
         <div id="status" class="col"></div>
-         <h3>Action Queue</h3>
-         <div id="queue-warning" class="notice" style="display:none;"></div>
-         <div id="action-queue" class="col" style="max-height: 220px; overflow:auto;"></div>
-         <div class="actions">
-           <button id="btn-complete-turn">Complete Turn</button>
-           <button id="btn-clear-queue" class="ghost">Clear Queue</button>
-           <button id="btn-exit-preview" class="secondary" style="display:none;">Exit Preview</button>
-         </div>
+        <h3>Action Queue</h3>
+        <div id="queue-warning" class="notice" style="display:none;"></div>
+        <div id="action-queue" class="col" style="max-height: 220px; overflow:auto;"></div>
+        <div class="actions">
+          <button id="btn-complete-turn">Complete Turn</button>
+          <button id="btn-clear-queue" class="ghost">Clear Queue</button>
+          <button id="btn-exit-preview" class="secondary" style="display:none;">Exit Preview</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1526,6 +1532,23 @@
     el('btn-clear-queue').addEventListener('click', ()=>{ ACTION_QUEUE = []; validateAndRenderQueue(); });
     el('btn-exit-preview').addEventListener('click', exitPreview);
 
+    // Collapsible sections (Objective and Legend hidden by default)
+    function setupCollapsibles() {
+      const headers = document.querySelectorAll('#game-screen .collapsible');
+      headers.forEach(h => {
+        const targetId = h.getAttribute('data-target');
+        const target = document.getElementById(targetId);
+        if (!target) return;
+        // default collapsed; clicking toggles
+        h.classList.remove('expanded');
+        target.style.display = 'none';
+        h.addEventListener('click', () => {
+          const expanded = h.classList.toggle('expanded');
+          target.style.display = expanded ? '' : 'none';
+        });
+      });
+    }
+
     function compareSolution(trace, expected) {
       for (let i = 0; i < Math.min(trace.length, expected.length); i++) {
         const a = trace[i], b = expected[i];
@@ -1564,6 +1587,7 @@
       if (loadSession()) { showScreen('menu'); await renderMenu(); }
       else { showScreen('login'); }
       fitBoardToContainer();
+      setupCollapsibles();
     })();
 
     // Doom piece helpers
