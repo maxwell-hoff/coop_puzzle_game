@@ -52,6 +52,8 @@
     .topbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid #2c3358; }
     .topbar .left, .topbar .right { display: flex; gap: 10px; align-items: center; }
     .content { display: grid; grid-template-columns: 320px 1fr 360px; gap: 12px; padding: 12px; }
+    /* Widen board: collapse left column on game screen */
+    #game-screen .content { grid-template-columns: 1fr 320px; }
     .panel { background: var(--panel); border: 1px solid #2c3358; border-radius: 14px; padding: 12px; overflow: auto; }
     .panel h3 { margin: 8px 0 8px; font-size: 16px; }
     .panel h2 { margin: 6px 0 6px; font-size: 20px; }
@@ -165,7 +167,7 @@
     <div class="content">
       <div class="panel col" style="display:none;"></div>
       <div class="board-wrap"><canvas id="board" width="900" height="740"></canvas></div>
-      <div class="panel col" style="overflow:auto;">
+      <div class="panel col" style="overflow:auto; max-height: calc(100vh - 120px);">
         <h3 class="collapsible" data-target="objective-wrap">Objective</h3>
         <div id="objective-wrap" style="display:none;" class="col">
           <div id="objective" class="muted">Capture the enemy Commander within the move limit.</div>
@@ -176,8 +178,6 @@
         <div id="legend-wrap" style="display:none;">
           <div class="legend" id="legend"></div>
         </div>
-        <h3>Log</h3>
-        <div id="log" class="col" style="max-height: 220px; overflow:auto; gap: 6px;"></div>
         <h3>Selected</h3>
         <div id="selected" class="muted">None</div>
         <div class="actions">
@@ -198,6 +198,8 @@
           <button id="btn-clear-queue" class="ghost">Clear Queue</button>
           <button id="btn-exit-preview" class="secondary" style="display:none;">Exit Preview</button>
         </div>
+        <h3>Log</h3>
+        <div id="log" class="col" style="max-height: 220px; overflow:auto; gap: 6px;"></div>
       </div>
     </div>
   </div>
