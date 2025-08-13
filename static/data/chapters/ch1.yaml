@@ -1,0 +1,8 @@
+id: ch1
+title: The Whispering Vale
+text: Rumors speak of an ancient crown lost in the Vale. Two warbands converge. Each puzzle is a skirmish where precise tactics win the day.
+hint: Every puzzle is winnable within the turn limit. Study auras and lines of sight.
+puzzles:
+  - p1.yaml
+  - p2.yaml
+  - p3.yaml

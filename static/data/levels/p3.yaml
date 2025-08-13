@@ -1,0 +1,15 @@
+id: p3
+name: Berserker’s Ring (Mate in 2)
+limit: 2
+description: Berserker can clear a path. Watch for counter-attack lines.
+hint: Auras turn off attacks. Step out of them.
+setup:
+  pieces:
+    - { type: Commander, side: Player, q: 0, r: 2 }
+    - { type: Berserker, side: Player, q: 0, r: 1 }
+    - { type: Archer, side: Player, q: -1, r: 2 }
+
+    - { type: Commander, side: Enemy, q: 1, r: -1 }
+    - { type: Guardian, side: Enemy, q: 0, r: 0 }
+    - { type: Shieldbearer, side: Enemy, q: 1, r: 0 }
+    - { type: Archer, side: Enemy, q: 2, r: -1 }

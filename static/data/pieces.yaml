@@ -1,0 +1,91 @@
+pieces:
+  Commander:
+    name: Commander
+    icon: K
+    move: 1
+    melee: true
+    value: 100
+    desc: Your king. Lose if defeated.
+  Archer:
+    name: Archer
+    icon: A
+    move: 2
+    melee: true
+    ranged:
+      range: 3
+      los: true
+      type: physical
+    value: 5
+    desc: Ranged physical attack up to 3 with line of sight.
+  Berserker:
+    name: Berserker
+    icon: B
+    move: 1
+    melee: true
+    onAttack: aoe_adjacent
+    value: 4
+    desc: Melee. When attacking, also damages all adjacent enemies.
+  Guardian:
+    name: Guardian
+    icon: G
+    move: 1
+    melee: true
+    aura:
+      disarm: 1
+    value: 4
+    desc: Aura disarms adjacent enemies (no melee/ranged).
+  Mage:
+    name: Mage
+    icon: M
+    move: 1
+    melee: false
+    spell:
+      range: 3
+      los: false
+      type: spell
+    value: 6
+    desc: Spell attack up to 3 ignoring line-of-sight. Blocked if silenced.
+  Trapper:
+    name: Trapper
+    icon: T
+    move: 1
+    melee: false
+    ability:
+      immobilize:
+        range: 1
+        duration: 1
+    value: 3
+    desc: Immobilize adjacent target for 1 turn.
+  Assassin:
+    name: Assassin
+    icon: S
+    move: 2
+    melee: true
+    leap: true
+    value: 5
+    desc: Moves up to 2. Can leap through empty tiles.
+  Shieldbearer:
+    name: Shield
+    icon: H
+    move: 1
+    melee: false
+    block: true
+    value: 2
+    desc: Cannot attack. Blocks line-of-sight for physical and spell attacks.
+  HexPriest:
+    name: Priest
+    icon: P
+    move: 1
+    melee: false
+    aura:
+      silence: 1
+    value: 4
+    desc: Aura silences adjacent enemies (no spells).
+  Doom:
+    name: Doom
+    icon: D
+    move: 0
+    melee: false
+    unkillable: true
+    value: 9999
+    desc: Embodiment of the turn limit. When time expires, it slays your army. Cannot be targeted or killed.
