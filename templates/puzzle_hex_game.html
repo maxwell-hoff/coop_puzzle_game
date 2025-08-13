@@ -288,93 +288,23 @@
     }
     function axialKey(q, r) { return `${q},${r}`; }
 
-    // --- Piece Definitions ---
-    // icon: one-letter code for rendering; color: outline color
-    const PIECE_TYPES = {
-      Commander: { name: 'Commander', icon: 'K', move: 1, melee: true, value: 100, desc: 'Your king. Lose if defeated.' },
-      Archer: { name: 'Archer', icon: 'A', move: 2, melee: true, ranged: { range: 3, los: true, type: 'physical' }, value: 5, desc: 'Ranged physical attack up to 3 with line of sight.' },
-      Berserker: { name: 'Berserker', icon: 'B', move: 1, melee: true, onAttack: 'aoe_adjacent', value: 4, desc: 'Melee. When attacking, also damages all adjacent enemies.' },
-      Guardian: { name: 'Guardian', icon: 'G', move: 1, melee: true, aura: { disarm: 1 }, value: 4, desc: 'Aura disarms adjacent enemies (no melee/ranged).' },
-      Mage: { name: 'Mage', icon: 'M', move: 1, melee: false, spell: { range: 3, los: false, type: 'spell' }, value: 6, desc: 'Spell attack up to 3 ignoring line-of-sight. Blocked if silenced.' },
-      Trapper: { name: 'Trapper', icon: 'T', move: 1, melee: false, ability: { immobilize: { range: 1, duration: 1 } }, value: 3, desc: 'Immobilize adjacent target for 1 turn.' },
-      Assassin: { name: 'Assassin', icon: 'S', move: 2, melee: true, leap: true, value: 5, desc: 'Moves up to 2. Can leap through empty tiles.' },
-      Shieldbearer: { name: 'Shield', icon: 'H', move: 1, melee: false, block: true, value: 2, desc: 'Cannot attack. Blocks line-of-sight for physical and spell attacks.' },
-      HexPriest: { name: 'Priest', icon: 'P', move: 1, melee: false, aura: { silence: 1 }, value: 4, desc: 'Aura silences adjacent enemies (no spells).' },
-      Doom: { name: 'Doom', icon: 'D', move: 0, melee: false, unkillable: true, value: 9999, desc: 'Embodiment of the turn limit. When time expires, it slays your army. Cannot be targeted or killed.' },
-    };
-
-    const PIECE_ORDER = Object.keys(PIECE_TYPES);
-
-    // --- Puzzles & Story ---
-    const STORY = [
-      {
-        id: 'ch1',
-        title: 'The Whispering Vale',
-        text: 'Rumors speak of an ancient crown lost in the Vale. Two warbands converge. Each puzzle is a skirmish where precise tactics win the day.',
-        hint: 'Every puzzle is winnable within the turn limit. Study auras and lines of sight.',
-        puzzles: [
-          {
-            id: 'p1', name: 'Opening Gambit (Mate in 2)', limit: 2,
-            description: 'Use your Archer and Trapper to neutralize threats and strike the enemy Commander.',
-            hint: 'Immobilize to freeze a defender. Beware Guardian disarm.',
-            expected: [ // optional exact line to check solution
-              { side: SIDES.Player, action: 'ability', from: '0,0', to: '1,-1' },
-              { side: SIDES.Enemy, action: 'move', from: '2,-1', to: '1,-1' },
-              { side: SIDES.Player, action: 'ranged', from: '0,1', to: '2,0' },
-            ],
-            setup: {
-              // radius 4 board; define pieces by axial coords
-              pieces: [
-                { type: 'Commander', side: SIDES.Player, q: -1, r: 1 },
-                { type: 'Archer', side: SIDES.Player, q: 0, r: 1 },
-                { type: 'Trapper', side: SIDES.Player, q: 0, r: 0 },
-                { type: 'Shieldbearer', side: SIDES.Player, q: -1, r: 0 },
-
-                { type: 'Commander', side: SIDES.Enemy, q: 2, r: 0 },
-                { type: 'Guardian', side: SIDES.Enemy, q: 1, r: 0 },
-                { type: 'Berserker', side: SIDES.Enemy, q: 2, r: -1 },
-                { type: 'Archer', side: SIDES.Enemy, q: 1, r: -2 },
-              ]
-            }
-          },
-          {
-            id: 'p2', name: 'Silent Strike (Mate in 3)', limit: 3,
-            description: 'A Priest silences enemy Mages; thread the needle while avoiding disarm auras.',
-            hint: 'Use Shieldbearer to break line-of-sight.',
-            setup: {
-              pieces: [
-                { type: 'Commander', side: SIDES.Player, q: -2, r: 2 },
-                { type: 'Mage', side: SIDES.Player, q: -1, r: 1 },
-                { type: 'Shieldbearer', side: SIDES.Player, q: -1, r: 2 },
-                { type: 'Assassin', side: SIDES.Player, q: -2, r: 1 },
-
-                { type: 'Commander', side: SIDES.Enemy, q: 2, r: -1 },
-                { type: 'HexPriest', side: SIDES.Enemy, q: 1, r: -1 },
-                { type: 'Guardian', side: SIDES.Enemy, q: 1, r: 0 },
-                { type: 'Archer', side: SIDES.Enemy, q: 2, r: -2 },
-              ]
-            }
-          },
-          {
-            id: 'p3', name: 'Berserker’s Ring (Mate in 2)', limit: 2,
-            description: 'Berserker can clear a path. Watch for counter-attack lines.',
-            hint: 'Auras turn off attacks. Step out of them.',
-            setup: {
-              pieces: [
-                { type: 'Commander', side: SIDES.Player, q: 0, r: 2 },
-                { type: 'Berserker', side: SIDES.Player, q: 0, r: 1 },
-                { type: 'Archer', side: SIDES.Player, q: -1, r: 2 },
-
-                { type: 'Commander', side: SIDES.Enemy, q: 1, r: -1 },
-                { type: 'Guardian', side: SIDES.Enemy, q: 0, r: 0 },
-                { type: 'Shieldbearer', side: SIDES.Enemy, q: 1, r: 0 },
-                { type: 'Archer', side: SIDES.Enemy, q: 2, r: -1 },
-              ]
-            }
-          }
-        ]
-      }
-    ];
+    // --- Piece and Chapter Data (loaded from backend) ---
+    let PIECE_TYPES = {};
+    let PIECE_ORDER = [];
+    let CURRENT_CHAPTER = null;
+    async function loadPieces() {
+      const res = await fetch('/api/data/pieces');
+      if (!res.ok) throw new Error('Failed to load pieces');
+      const data = await res.json();
+      PIECE_TYPES = data.pieces || {};
+      PIECE_ORDER = Object.keys(PIECE_TYPES);
+    }
+    async function loadChapter(index) {
+      const res = await fetch(`/api/data/chapter/${index}`);
+      if (!res.ok) throw new Error('Failed to load chapter');
+      const data = await res.json();
+      CURRENT_CHAPTER = data;
+    }
 
     // --- UI Elements ---
     const el = (id) => document.getElementById(id);
@@ -386,7 +316,6 @@
 
     // --- Session State ---
     let CURRENT_USER = null; // { username, data }
-    let CURRENT_CHAPTER = STORY[0];
     let CURRENT_PUZZLE = null;
     let GAME = null;
 
@@ -888,7 +817,9 @@
       canvas.width = availW;
       canvas.height = availH;
       viewOffset = { x: canvas.width / 2, y: canvas.height / 2 };
-      if (GAME) drawBoard(GAME); else drawBoard(new GameState(STORY[0].puzzles[0]));
+      if (GAME) drawBoard(GAME);
+      else if (CURRENT_CHAPTER?.puzzles?.length) drawBoard(new GameState(CURRENT_CHAPTER.puzzles[0]));
+      else drawBoard(new GameState({ id: 'empty', name: 'Empty', limit: 1, setup: { pieces: [] } }));
     }
 
     window.addEventListener('resize', fitBoardToContainer);
@@ -1436,7 +1367,7 @@
       selectedId = null; highlightedMoves = [];
       el('game-title').innerText = p.name;
       el('objective').innerText = 'Capture the enemy Commander within '+p.limit+' turns.';
-      el('puzzle-desc').innerText = p.description;
+      el('puzzle-desc').innerText = p.description || '';
       el('puzzle-hint').innerText = p.hint || '';
       el('turns-left').innerText = p.limit;
       buildLegend();
@@ -1565,6 +1496,12 @@
       const p = el('login-password').value;
       const res = await login(u, p);
       if (!res.ok) { alert(res.error); return; }
+      try {
+        await loadPieces();
+        await loadChapter(CURRENT_USER.current_chapter || 1);
+      } catch (e) {
+        console.log(e);
+      }
       showScreen('menu'); renderMenu();
     });
     el('btn-register').addEventListener('click', async ()=>{
@@ -1586,8 +1523,16 @@
 
     // --- Boot ---
     (async function boot(){
-      if (loadSession()) { showScreen('menu'); await renderMenu(); }
-      else { showScreen('login'); }
+      if (loadSession()) {
+        try {
+          await loadPieces();
+          await loadChapter(CURRENT_USER.current_chapter || 1);
+        } catch (e) { console.log(e); }
+        showScreen('menu'); await renderMenu();
+      } else {
+        try { await loadPieces(); await loadChapter(1); } catch (e) { console.log(e); }
+        showScreen('login');
+      }
       fitBoardToContainer();
       setupCollapsibles();
     })();

@@ -1,0 +1,16 @@
+id: p2
+name: Silent Strike (Mate in 3)
+limit: 3
+description: A Priest silences enemy Mages; thread the needle while avoiding disarm auras.
+hint: Use Shieldbearer to break line-of-sight.
+setup:
+  pieces:
+    - { type: Commander, side: Player, q: -2, r: 2 }
+    - { type: Mage, side: Player, q: -1, r: 1 }
+    - { type: Shieldbearer, side: Player, q: -1, r: 2 }
+    - { type: Assassin, side: Player, q: -2, r: 1 }
+
+    - { type: Commander, side: Enemy, q: 2, r: -1 }
+    - { type: HexPriest, side: Enemy, q: 1, r: -1 }
+    - { type: Guardian, side: Enemy, q: 1, r: 0 }
+    - { type: Archer, side: Enemy, q: 2, r: -2 }

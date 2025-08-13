@@ -4,6 +4,8 @@ from flask_cors import CORS
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
+import yaml
+from pathlib import Path
 from datetime import datetime
 
 app = Flask(__name__)
@@ -16,6 +18,21 @@ CORS(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+# Data directory for YAML content
+DATA_DIR = Path(app.root_path) / 'static' / 'data'
+
+def _safe_load_yaml(path: Path):
+    if not path.exists():
+        return None
+    with path.open('r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+def _normalize_description(desc):
+    # YAML may provide a string or a list of paragraphs. Normalize to a single string.
+    if isinstance(desc, list):
+        return "\n\n".join(str(p) for p in desc)
+    return desc if isinstance(desc, str) else ''
 
 # Database Models
 class User(UserMixin, db.Model):
@@ -71,6 +88,46 @@ def load_user(user_id):
 @app.route('/')
 def index():
     return render_template('puzzle_hex_game.html')
+
+@app.route('/api/data/pieces', methods=['GET'])
+def get_pieces_data():
+    pieces_yaml = DATA_DIR / 'pieces.yaml'
+    data = _safe_load_yaml(pieces_yaml)
+    if data is None:
+        return jsonify({'error': 'Pieces data not found'}), 404
+    # Expect top-level key 'pieces'
+    pieces = data.get('pieces', {}) if isinstance(data, dict) else {}
+    return jsonify({'pieces': pieces})
+
+@app.route('/api/data/chapter/<int:chapter_num>', methods=['GET'])
+def get_chapter_data(chapter_num: int):
+    # Map numeric chapter to file id like ch1.yaml
+    chapter_file = DATA_DIR / 'chapters' / f'ch{chapter_num}.yaml'
+    chapter = _safe_load_yaml(chapter_file)
+    if chapter is None:
+        return jsonify({'error': 'Chapter not found'}), 404
+    # Load puzzles listed in chapter YAML under 'puzzles' as file names
+    puzzles_files = chapter.get('puzzles', []) if isinstance(chapter, dict) else []
+    puzzles = []
+    for rel in puzzles_files:
+        level_file = DATA_DIR / 'levels' / rel
+        level = _safe_load_yaml(level_file)
+        if not isinstance(level, dict):
+            continue
+        # Normalize description format
+        if 'description' in level:
+            level['description'] = _normalize_description(level['description'])
+        puzzles.append(level)
+    # Build response structure similar to what the frontend expects
+    resp = {
+        'id': chapter.get('id', f'ch{chapter_num}'),
+        'index': chapter_num,
+        'title': chapter.get('title', f'Chapter {chapter_num}'),
+        'text': chapter.get('text', ''),
+        'hint': chapter.get('hint', ''),
+        'puzzles': puzzles,
+    }
+    return jsonify(resp)
 
 @app.route('/api/register', methods=['POST'])
 def register():

@@ -1,0 +1,23 @@
+id: p1
+name: Opening Gambit (Mate in 2)
+limit: 2
+description:
+  - You get a nod from the priest and begin to march downhill through the mud towards the plain. Rays of sun scatter through the trees in the perimeter of the plain, lit by the lingering smoke from a thousand  cracks of a wand. The fresh moist morning air is replaced more by the smell of smoke and rotting flesh as you descend further down towards the plain. The mass of bodies that you’ll eventually have to walk over squirms like a living yeast. Every nerve in your body is telling you to turn back, but you proceed knowing the alternative will only be more painful.
+  - Four figures become noticeable through the smoke as we make our way through the field. They are spread out, lurching forward at a snail's pace in a ready stance, and weapons drawn.  They each have ragged clothes, shields of wood, and have no decorations. With eyes wide with terror you come to the conclusion that the people who sent him there think they are dispensable. They are reading us and confirming a plan through the slightest of motions towards another. Your heart races as you don't have plan yourselves.
+  - There are two standouts; a crowned figure with a staff standing in their back lines looking relatively at ease. It must be their resurrecting priest. And tall robed figure which you can tell doesn't have much weight beneath those clothes. There are hundreds of charms pinned to his robe. He must be a blood warden. After hearing about them as if mythical figures your mind races rethinking what stories you've written off as legends might be true.The blood warden begins to whisper and act as if pulling something with both hands from the ground. The ground beneath him begins to hiss and the smoke around him disappears. You don’t have long until you are all dead.
+hint: Immobilize to freeze a defender. Beware Guardian disarm.
+expected:
+  - { side: Player, action: ability, from: '0,0', to: '1,-1' }
+  - { side: Enemy, action: move, from: '2,-1', to: '1,-1' }
+  - { side: Player, action: ranged, from: '0,1', to: '2,0' }
+setup:
+  pieces:
+    - { type: Commander, side: Player, q: -1, r: 1 }
+    - { type: Archer, side: Player, q: 0, r: 1 }
+    - { type: Trapper, side: Player, q: 0, r: 0 }
+    - { type: Shieldbearer, side: Player, q: -1, r: 0 }
+
+    - { type: Commander, side: Enemy, q: 2, r: 0 }
+    - { type: Guardian, side: Enemy, q: 1, r: 0 }
+    - { type: Berserker, side: Enemy, q: 2, r: -1 }
+    - { type: Archer, side: Enemy, q: 1, r: -2 }
